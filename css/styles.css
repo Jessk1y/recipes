@@ -319,4 +319,19 @@ body {
   .detail-cols { grid-template-columns: 1fr; gap: 18px; }
   .detail-title { font-size: 1.5rem; }
   .logo { font-size: 1.1rem; }
+  /* На странице рецепта прячем поиск, чтобы не занимал экран */
+  body.detail-open .search-box { display: none; }
+}
+
+/* Телефон: две колонки с блюдами */
+@media (max-width: 640px) {
+  .grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+  }
+  .card-body { padding: 11px 12px 13px; gap: 6px; }
+  .card-title { font-size: .95rem; }
+  .card-img { font-size: 2.4rem; }
+  .mini-tag { font-size: .68rem; padding: 2px 7px; }
+  .card-meta { font-size: .78rem; gap: 8px; }
 }

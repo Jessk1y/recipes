@@ -1,5 +1,19 @@
 "use strict";
 
+// Основные теги для фильтра на главной (в этом порядке).
+// Показываются только те, что есть хотя бы у одного рецепта (поле main).
+const MAIN_TAGS = [
+  "Первое",
+  "Второе",
+  "Салат",
+  "Десерт",
+  "Напиток",
+  "Курица",
+  "Свинина",
+  "Говядина",
+  "Шоколад",
+];
+
 const state = {
   recipes: [],
   query: "",
@@ -34,15 +48,14 @@ async function load() {
 // --- Поиск/фильтрация ---
 function matches(recipe) {
   if (state.activeTag) {
-    const inTags = (recipe.tags || []).includes(state.activeTag);
-    const inCat = recipe.category === state.activeTag;
-    if (!inTags && !inCat) return false;
+    if (!(recipe.main || []).includes(state.activeTag)) return false;
   }
   const q = state.query.trim().toLowerCase();
   if (!q) return true;
   const haystack = [
     recipe.title,
     recipe.category,
+    (recipe.main || []).join(" "),
     (recipe.tags || []).join(" "),
     (recipe.ingredients || []).join(" "),
   ]
@@ -52,12 +65,9 @@ function matches(recipe) {
 }
 
 function buildTags() {
-  const set = new Set();
-  state.recipes.forEach((r) => {
-    if (r.category) set.add(r.category);
-    (r.tags || []).forEach((t) => set.add(t));
-  });
-  const tags = Array.from(set).sort((a, b) => a.localeCompare(b, "ru"));
+  const present = new Set();
+  state.recipes.forEach((r) => (r.main || []).forEach((t) => present.add(t)));
+  const tags = MAIN_TAGS.filter((t) => present.has(t));
   els.tags.innerHTML =
     `<button class="tag-chip" data-tag="">Все</button>` +
     tags
@@ -90,8 +100,7 @@ function renderList() {
       const img = r.image
         ? `<img src="${esc(r.image)}" alt="${esc(r.title)}" loading="lazy">`
         : emojiFor(r);
-      const tags = (r.tags || [])
-        .slice(0, 3)
+      const tags = (r.main || [])
         .map((t) => `<span class="mini-tag">${esc(t)}</span>`)
         .join("");
       const meta = [r.time, r.servings].filter(Boolean).map(esc).join(" · ");
@@ -121,7 +130,8 @@ function renderDetail(id) {
     .filter(Boolean)
     .map((m) => `<span>${esc(m)}</span>`)
     .join("");
-  const tags = (r.tags || [])
+  const allTags = [...new Set([...(r.main || []), ...(r.tags || [])])];
+  const tags = allTags
     .map((t) => `<span class="mini-tag">${esc(t)}</span>`)
     .join("");
   const ingredients = (r.ingredients || [])
@@ -168,10 +178,12 @@ function route() {
   if (m) {
     els.listView.hidden = true;
     els.detailView.hidden = false;
+    document.body.classList.add("detail-open");
     renderDetail(decodeURIComponent(m[1]));
   } else {
     els.detailView.hidden = true;
     els.listView.hidden = false;
+    document.body.classList.remove("detail-open");
     renderList();
   }
 }
