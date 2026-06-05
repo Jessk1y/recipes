@@ -315,6 +315,14 @@ body {
   text-align: center;
 }
 
+/* На странице рецепта шапка непрозрачная и закреплена — без просвечивания
+   контента (на главной остаётся полупрозрачной/«бегающей»). */
+body.detail-open .site-header {
+  background: var(--bg);
+  backdrop-filter: none;
+  box-shadow: 0 1px 0 var(--line);
+}
+
 @media (max-width: 720px) {
   .detail-cols { grid-template-columns: 1fr; gap: 18px; }
   .detail-title { font-size: 1.5rem; }
