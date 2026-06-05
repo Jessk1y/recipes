@@ -315,12 +315,10 @@ body {
   text-align: center;
 }
 
-/* На странице рецепта шапка непрозрачная и закреплена — без просвечивания
-   контента (на главной остаётся полупрозрачной/«бегающей»). */
+/* На странице рецепта шапка НЕ закреплена — стоит вверху и уезжает при
+   скролле (на главной остаётся sticky и «бегает» вместе с поиском). */
 body.detail-open .site-header {
-  background: var(--bg);
-  backdrop-filter: none;
-  box-shadow: 0 1px 0 var(--line);
+  position: static;
 }
 
 @media (max-width: 720px) {
