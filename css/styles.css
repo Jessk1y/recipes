@@ -239,7 +239,19 @@ body {
   position: relative;
 }
 .ingredients-list li:last-child { border-bottom: none; }
-.ingredients-list li::before {
+.ingredients-list li.sub-head {
+  font-weight: 800;
+  color: var(--accent);
+  padding-left: 0;
+  padding-top: 16px;
+  border-bottom: none;
+  font-size: .82rem;
+  text-transform: uppercase;
+  letter-spacing: .03em;
+}
+.ingredients-list li.sub-head::before { display: none; }
+.ingredients-list li.sub-head:first-child { padding-top: 0; }
+.ingredients-list li:not(.sub-head)::before {
   content: "";
   position: absolute;
   left: 4px;
@@ -256,7 +268,19 @@ body {
   counter-increment: step;
 }
 .steps-list li:last-child { padding-bottom: 0; }
-.steps-list li::before {
+.steps-list li.sub-head {
+  counter-increment: none;
+  padding: 16px 0 10px;
+  font-weight: 800;
+  color: var(--accent);
+  font-size: .82rem;
+  text-transform: uppercase;
+  letter-spacing: .03em;
+}
+.steps-list li.sub-head::before,
+.steps-list li.sub-head::after { display: none; }
+.steps-list li.sub-head:first-child { padding-top: 0; }
+.steps-list li:not(.sub-head)::before {
   content: counter(step);
   position: absolute;
   left: 0;

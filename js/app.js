@@ -125,9 +125,19 @@ function renderDetail(id) {
     .map((t) => `<span class="mini-tag">${esc(t)}</span>`)
     .join("");
   const ingredients = (r.ingredients || [])
-    .map((i) => `<li>${esc(i)}</li>`)
+    .map((i) =>
+      i && typeof i === "object" && i.h
+        ? `<li class="sub-head">${esc(i.h)}</li>`
+        : `<li>${esc(i)}</li>`
+    )
     .join("");
-  const steps = (r.steps || []).map((s) => `<li>${esc(s)}</li>`).join("");
+  const steps = (r.steps || [])
+    .map((s) =>
+      s && typeof s === "object" && s.h
+        ? `<li class="sub-head">${esc(s.h)}</li>`
+        : `<li>${esc(s)}</li>`
+    )
+    .join("");
 
   els.detailView.innerHTML = `
     <button class="back-btn" id="back">← К списку рецептов</button>
