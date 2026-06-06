@@ -67,6 +67,9 @@ async function load() {
     return;
   }
   state.recipes.forEach((r, i) => (r._order = i)); // новизна = позиция в массиве
+  // миграция старого списка покупок (строки → объекты)
+  store.shopping = store.shopping.map((it) => (typeof it === "string" ? parseIng(it) : it));
+  store.saveShopping();
   buildToolbar();
   buildTags();
   updateShoppingBadge();
@@ -298,12 +301,14 @@ function ingredientsHTML(r, factor) {
 
 function stepsHTML(r) {
   const checks = (store.checks[r.id] && store.checks[r.id].step) || {};
+  let no = 0;
   return (r.steps || []).map((s, idx) => {
     if (s && typeof s === "object" && s.h) return `<li class="sub-head">${esc(s.h)}</li>`;
+    no++;
     const on = checks[idx] ? " checked" : "";
     const sec = stepSeconds(s);
     const timer = sec ? `<button class="timer-btn" data-sec="${sec}">⏱ ${fmtClock(sec)}</button>` : "";
-    return `<li class="step-item${on}" data-step="${idx}"><div class="step-text">${esc(s)}</div>${timer}</li>`;
+    return `<li class="step-item${on}" data-step="${idx}" data-stepno="${no}"><div class="step-text">${esc(s)}</div>${timer}</li>`;
   }).join("");
 }
 
@@ -348,6 +353,7 @@ function renderDetail(id) {
         <button class="srv" data-f="3">3×</button>
       </div>
       <button class="act-btn" id="toShopping">🛒 В список покупок</button>
+      <button class="act-btn" id="resetBtn">↺ Сбросить отметки</button>
     </div>
 
     <div class="detail-cols">
@@ -385,6 +391,13 @@ function renderDetail(id) {
   });
   // add to shopping
   document.getElementById("toShopping").addEventListener("click", () => addToShopping(r, state.factor));
+  // reset checks
+  document.getElementById("resetBtn").addEventListener("click", () => {
+    delete store.checks[r.id];
+    store.saveChecks();
+    renderDetail(r.id);
+    toast("Отметки сброшены ↺");
+  });
   // notes autosave
   document.getElementById("noteArea").addEventListener("input", (e) => {
     const v = e.target.value;
@@ -429,16 +442,20 @@ const timers = new Map();
 function bindTimers() {
   document.querySelectorAll(".timer-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
+      ensureAudio();              // разблокировать звук по жесту
+      requestNotifyPermission();  // спросить разрешение на уведомления
       if (timers.has(btn)) { stopTimer(btn); return; }
-      let left = +btn.dataset.sec;
+      const total = +btn.dataset.sec;
+      const endAt = Date.now() + total * 1000;
+      btn.classList.remove("done");
       btn.classList.add("running");
-      btn.textContent = "⏸ " + fmtClock(left);
-      const iv = setInterval(() => {
-        left--;
+      const tick = () => {
+        const left = Math.round((endAt - Date.now()) / 1000);
         if (left <= 0) { finishTimer(btn); return; }
         btn.textContent = "⏸ " + fmtClock(left);
-      }, 1000);
-      timers.set(btn, iv);
+      };
+      tick();
+      timers.set(btn, setInterval(tick, 1000));
     });
   });
 }
@@ -455,20 +472,56 @@ function finishTimer(btn) {
   btn.classList.add("done");
   btn.textContent = "✅ Готово!";
   beep();
+  const li = btn.closest(".step-item");
+  const stepNo = li && li.dataset.stepno ? li.dataset.stepno : "";
+  const title = state.current ? state.current.title : "Рецепт";
+  const stepText = li ? shorten(li.querySelector(".step-text").textContent, 90) : "";
+  const head = "⏱ " + title;
+  const body = (stepNo ? "Шаг " + stepNo + " готов" : "Таймер готов") + (stepText ? " — " + stepText : "");
+  notify(head, body);
+  toast("⏱ Готово: " + title + (stepNo ? " · шаг " + stepNo : ""));
+}
+// Единый AudioContext, создаётся/возобновляется по жесту (клик «старт таймера»)
+let audioCtx = null;
+function ensureAudio() {
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === "suspended") audioCtx.resume();
+  } catch (e) {}
 }
 function beep() {
+  ensureAudio();
   try {
-    const A = new (window.AudioContext || window.webkitAudioContext)();
-    const o = A.createOscillator(), g = A.createGain();
-    o.connect(g); g.connect(A.destination);
-    o.type = "sine"; o.frequency.value = 880;
-    g.gain.setValueAtTime(0.001, A.currentTime);
-    g.gain.exponentialRampToValueAtTime(0.3, A.currentTime + 0.02);
-    g.gain.exponentialRampToValueAtTime(0.001, A.currentTime + 0.6);
-    o.start(); o.stop(A.currentTime + 0.6);
+    const A = audioCtx;
+    if (A) {
+      const base = A.currentTime;
+      for (let k = 0; k < 3; k++) {
+        const o = A.createOscillator(), g = A.createGain();
+        o.connect(g); g.connect(A.destination);
+        o.type = "sine"; o.frequency.value = 880;
+        const t = base + k * 0.35;
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(0.5, t + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.3);
+        o.start(t); o.stop(t + 0.32);
+      }
+    }
   } catch (e) {}
-  if (navigator.vibrate) navigator.vibrate([250, 120, 250]);
+  if (navigator.vibrate) navigator.vibrate([300, 150, 300, 150, 300]);
 }
+function requestNotifyPermission() {
+  try {
+    if ("Notification" in window && Notification.permission === "default") Notification.requestPermission();
+  } catch (e) {}
+}
+function notify(title, body) {
+  try {
+    if ("Notification" in window && Notification.permission === "granted") {
+      new Notification(title, { body, icon: "icons/icon-192.png", tag: "timer-" + Date.now() });
+    }
+  } catch (e) {}
+}
+function shorten(s, n) { s = String(s); return s.length > n ? s.slice(0, n).trim() + "…" : s; }
 
 // ---------- Wake Lock ----------
 let wakeLock = null;
@@ -497,15 +550,37 @@ function pushRecent(id) {
 }
 
 // ---------- Список покупок ----------
+// Разбор "Название — количество" (разделитель — длинное тире U+2014)
+function parseIng(str) {
+  str = String(str).trim();
+  const i = str.indexOf("—");
+  if (i < 0) return { name: str, amount: "" };
+  return { name: str.slice(0, i).trim(), amount: str.slice(i + 1).trim() };
+}
+function normName(n) { return String(n).trim().toLowerCase().replace(/\s+/g, " "); }
+function shoppingText(it) { return it.amount ? it.name + " — " + it.amount : it.name; }
+
 function addToShopping(r, factor) {
-  const items = (r.ingredients || [])
-    .filter((i) => !(i && typeof i === "object"))
-    .map((i) => scaleQty(String(i), factor));
-  let added = 0;
-  items.forEach((it) => { if (!store.shopping.includes(it)) { store.shopping.push(it); added++; } });
+  const checks = (store.checks[r.id] && store.checks[r.id].ing) || {};
+  let added = 0, skipped = 0;
+  (r.ingredients || []).forEach((ing, idx) => {
+    if (ing && typeof ing === "object") return;      // под-заголовок
+    if (checks[idx]) { skipped++; return; }          // вычеркнутые — уже есть
+    const { name, amount } = parseIng(scaleQty(String(ing), factor));
+    const key = normName(name);
+    const item = store.shopping.find((it) => normName(it.name) === key);
+    if (item) {
+      if (amount) {
+        const have = item.amount.split(" + ").map((s) => s.trim());
+        if (!have.includes(amount)) { item.amount = item.amount ? item.amount + " + " + amount : amount; added++; }
+      }
+    } else {
+      store.shopping.push({ name, amount }); added++;
+    }
+  });
   store.saveShopping();
   updateShoppingBadge();
-  toast(added ? `Добавлено в список: ${added} 🛒` : "Уже в списке");
+  toast(added ? "Добавлено в список 🛒" : (skipped ? "Всё уже отмечено/в списке" : "Уже в списке"));
 }
 function updateShoppingBadge() {
   const n = store.shopping.length;
@@ -522,7 +597,7 @@ function renderShopping() {
     <h1 class="detail-title">🛒 Список покупок</h1>
     ${items.length
       ? `<ul class="ingredients-list shopping-list">${items.map((it, i) =>
-          `<li class="check-item" data-sh="${i}"><span class="cbox"></span><span class="ctext">${esc(it)}</span><button class="sh-del" data-del="${i}" title="Удалить">✕</button></li>`).join("")}</ul>`
+          `<li class="check-item" data-sh="${i}"><span class="cbox"></span><span class="ctext">${esc(shoppingText(it))}</span><button class="sh-del" data-del="${i}" title="Удалить">✕</button></li>`).join("")}</ul>`
       : `<p class="empty">Список пуст. Открой рецепт и нажми «🛒 В список покупок».</p>`}`;
   document.getElementById("shBack").addEventListener("click", () => { location.hash = "#"; });
   const clr = document.getElementById("shClear");

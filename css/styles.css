@@ -8,6 +8,7 @@
   --line: #ece5db;
   --shadow: 0 6px 20px rgba(80, 60, 40, 0.08);
   --radius: 16px;
+  --header-bg: rgba(251, 247, 240, 0.92);
 }
 
 * { box-sizing: border-box; }
@@ -31,7 +32,7 @@ body {
   position: sticky;
   top: 0;
   z-index: 10;
-  background: rgba(251, 247, 240, 0.92);
+  background: var(--header-bg);
   backdrop-filter: blur(8px);
   border-bottom: 1px solid var(--line);
   padding: 14px 0;
@@ -352,6 +353,7 @@ body.detail-open .site-header {
   --accent-soft: #3a2a20;
   --line: #38332d;
   --shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+  --header-bg: rgba(27, 25, 22, 0.92);
 }
 
 /* =================== Шапка: кнопки =================== */
