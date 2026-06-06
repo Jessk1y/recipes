@@ -566,7 +566,11 @@ function startCustomTimer(total, name) {
   del.className = "ct-x";
   del.title = "Убрать таймер";
   del.textContent = "✕";
-  del.addEventListener("click", () => { if (timers.has(btn)) stopTimer(btn); chip.remove(); });
+  del.addEventListener("click", () => {
+    if (timers.has(btn)) stopTimer(btn);
+    if (btn.classList.contains("ringing")) stopRing(btn); // заглушить звонок, если звенел
+    chip.remove();
+  });
   chip.appendChild(label);
   chip.appendChild(btn);
   chip.appendChild(del);
