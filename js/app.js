@@ -367,6 +367,24 @@ function renderDetail(id) {
       </div>
     </div>
 
+    <div class="panel timer-panel">
+      <h2>⏱ Свой таймер</h2>
+      <div class="ctimer-presets">
+        <button class="ct-preset" data-min="1">1 мин</button>
+        <button class="ct-preset" data-min="5">5 мин</button>
+        <button class="ct-preset" data-min="10">10 мин</button>
+        <button class="ct-preset" data-min="15">15 мин</button>
+        <button class="ct-preset" data-min="30">30 мин</button>
+      </div>
+      <div class="ctimer-form">
+        <input id="ctName" class="ct-input" placeholder="Название (необязательно)" />
+        <input id="ctMin" class="ct-input ct-num" type="number" min="0" inputmode="numeric" placeholder="мин" />
+        <input id="ctSec" class="ct-input ct-num" type="number" min="0" max="59" inputmode="numeric" placeholder="сек" />
+        <button id="ctStart" class="tool-btn accent">Запустить</button>
+      </div>
+      <div id="ctList" class="ctimer-list"></div>
+    </div>
+
     <div class="panel notes-panel">
       <h2>📝 Мои заметки</h2>
       <textarea id="noteArea" class="note-area" placeholder="Например: в следующий раз меньше соли…">${esc(note)}</textarea>
@@ -398,6 +416,12 @@ function renderDetail(id) {
     renderDetail(r.id);
     toast("Отметки сброшены ↺");
   });
+  // свой таймер
+  document.getElementById("ctStart").addEventListener("click", addCustomTimer);
+  els.detailView.querySelectorAll(".ct-preset").forEach((b) =>
+    b.addEventListener("click", () => startCustomTimer((+b.dataset.min) * 60, "")));
+  ["ctName", "ctMin", "ctSec"].forEach((id) =>
+    document.getElementById(id).addEventListener("keydown", (e) => { if (e.key === "Enter") addCustomTimer(); }));
   // notes autosave
   document.getElementById("noteArea").addEventListener("input", (e) => {
     const v = e.target.value;
@@ -439,23 +463,28 @@ function bindStepChecks(r) {
 
 // ---------- Таймеры ----------
 const timers = new Map();
+function startTimerBtn(btn) {
+  ensureAudio();              // разблокировать звук по жесту
+  requestNotifyPermission();  // спросить разрешение на уведомления
+  if (timers.has(btn)) return;
+  const total = +btn.dataset.sec;
+  const endAt = Date.now() + total * 1000;
+  btn.classList.remove("done");
+  btn.classList.add("running");
+  const tick = () => {
+    const left = Math.round((endAt - Date.now()) / 1000);
+    if (left <= 0) { finishTimer(btn); return; }
+    btn.textContent = "⏸ " + fmtClock(left);
+  };
+  tick();
+  timers.set(btn, setInterval(tick, 1000));
+}
 function bindTimers() {
   document.querySelectorAll(".timer-btn").forEach((btn) => {
+    if (btn.dataset.bound) return;
+    btn.dataset.bound = "1";
     btn.addEventListener("click", () => {
-      ensureAudio();              // разблокировать звук по жесту
-      requestNotifyPermission();  // спросить разрешение на уведомления
-      if (timers.has(btn)) { stopTimer(btn); return; }
-      const total = +btn.dataset.sec;
-      const endAt = Date.now() + total * 1000;
-      btn.classList.remove("done");
-      btn.classList.add("running");
-      const tick = () => {
-        const left = Math.round((endAt - Date.now()) / 1000);
-        if (left <= 0) { finishTimer(btn); return; }
-        btn.textContent = "⏸ " + fmtClock(left);
-      };
-      tick();
-      timers.set(btn, setInterval(tick, 1000));
+      if (timers.has(btn)) stopTimer(btn); else startTimerBtn(btn);
     });
   });
 }
@@ -472,14 +501,57 @@ function finishTimer(btn) {
   btn.classList.add("done");
   btn.textContent = "✅ Готово!";
   beep();
-  const li = btn.closest(".step-item");
-  const stepNo = li && li.dataset.stepno ? li.dataset.stepno : "";
   const title = state.current ? state.current.title : "Рецепт";
-  const stepText = li ? shorten(li.querySelector(".step-text").textContent, 90) : "";
-  const head = "⏱ " + title;
-  const body = (stepNo ? "Шаг " + stepNo + " готов" : "Таймер готов") + (stepText ? " — " + stepText : "");
-  notify(head, body);
-  toast("⏱ Готово: " + title + (stepNo ? " · шаг " + stepNo : ""));
+  const li = btn.closest(".step-item");
+  let body, tail;
+  if (btn.dataset.name) {
+    body = btn.dataset.name + " — готово";
+    tail = " · " + btn.dataset.name;
+  } else if (li && li.dataset.stepno) {
+    body = "Шаг " + li.dataset.stepno + " готов — " + shorten(li.querySelector(".step-text").textContent, 90);
+    tail = " · шаг " + li.dataset.stepno;
+  } else { body = "Таймер готов"; tail = ""; }
+  notify("⏱ " + title, body);
+  toast("⏱ Готово: " + title + tail);
+}
+
+// Свой (произвольный) таймер на странице рецепта
+function addCustomTimer() {
+  const min = parseInt(document.getElementById("ctMin").value, 10) || 0;
+  const sec = parseInt(document.getElementById("ctSec").value, 10) || 0;
+  const total = min * 60 + sec;
+  if (total <= 0) { toast("Укажи время таймера"); return; }
+  const name = (document.getElementById("ctName").value || "").trim();
+  startCustomTimer(total, name);
+  document.getElementById("ctMin").value = "";
+  document.getElementById("ctSec").value = "";
+  document.getElementById("ctName").value = "";
+}
+function startCustomTimer(total, name) {
+  const list = document.getElementById("ctList");
+  if (!list) return;
+  const chip = document.createElement("div");
+  chip.className = "ct-chip";
+  const label = document.createElement("span");
+  label.className = "ct-name";
+  label.textContent = name || "Таймер";
+  const btn = document.createElement("button");
+  btn.className = "timer-btn";
+  btn.dataset.sec = total;
+  if (name) btn.dataset.name = name;
+  btn.dataset.bound = "1";
+  btn.textContent = "⏱ " + fmtClock(total);
+  btn.addEventListener("click", () => { if (timers.has(btn)) stopTimer(btn); else startTimerBtn(btn); });
+  const del = document.createElement("button");
+  del.className = "ct-x";
+  del.title = "Убрать таймер";
+  del.textContent = "✕";
+  del.addEventListener("click", () => { if (timers.has(btn)) stopTimer(btn); chip.remove(); });
+  chip.appendChild(label);
+  chip.appendChild(btn);
+  chip.appendChild(del);
+  list.appendChild(chip);
+  startTimerBtn(btn); // запускаем сразу
 }
 // Единый AudioContext, создаётся/возобновляется по жесту (клик «старт таймера»)
 let audioCtx = null;

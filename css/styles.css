@@ -588,6 +588,51 @@ body.detail-open .site-header {
 .timer-btn.running { background: var(--accent); color: #fff; }
 .timer-btn.done { background: #2e9e5b; border-color: #2e9e5b; color: #fff; }
 
+/* =================== Свой таймер =================== */
+.timer-panel { margin-top: 22px; }
+.ctimer-presets { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.ct-preset {
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--ink);
+  padding: 6px 13px;
+  border-radius: 999px;
+  font: inherit; font-weight: 700; font-size: .85rem;
+  cursor: pointer; transition: all .15s;
+}
+.ct-preset:hover { border-color: var(--accent); color: var(--accent); }
+.ctimer-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.ct-input {
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--ink);
+  border-radius: 10px;
+  padding: 9px 12px;
+  font: inherit;
+  outline: none;
+}
+.ct-input:focus { border-color: var(--accent); }
+.ct-input::placeholder { color: var(--muted); }
+#ctName { flex: 1; min-width: 140px; }
+.ct-num { width: 78px; }
+.ctimer-list { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+.ct-chip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 8px 10px;
+}
+.ct-name { font-weight: 700; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ct-chip .timer-btn { margin-top: 0; }
+.ct-x {
+  border: none; background: none; color: var(--muted);
+  font-size: 1rem; cursor: pointer; padding: 0 4px;
+}
+.ct-x:hover { color: var(--accent); }
+
 /* =================== Заметки =================== */
 .notes-panel { margin-top: 22px; }
 .note-area {
