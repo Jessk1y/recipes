@@ -341,3 +341,307 @@ body.detail-open .site-header {
   .mini-tag { font-size: .68rem; padding: 2px 7px; }
   .card-meta { font-size: .78rem; gap: 8px; }
 }
+
+/* =================== Тёмная тема =================== */
+:root[data-theme="dark"] {
+  --bg: #1b1916;
+  --card: #262220;
+  --ink: #efe9e1;
+  --muted: #a59b8e;
+  --accent: #f07338;
+  --accent-soft: #3a2a20;
+  --line: #38332d;
+  --shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+}
+
+/* =================== Шапка: кнопки =================== */
+.header-actions { display: flex; gap: 6px; }
+.icon-btn {
+  position: relative;
+  border: 1px solid var(--line);
+  background: var(--card);
+  border-radius: 999px;
+  width: 40px; height: 40px;
+  font-size: 1.15rem;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: border-color .15s, transform .1s;
+}
+.icon-btn:hover { border-color: var(--accent); }
+.icon-btn:active { transform: scale(.92); }
+.badge[hidden] { display: none; }
+.badge {
+  position: absolute;
+  top: -4px; right: -4px;
+  background: var(--accent);
+  color: #fff;
+  font-size: .68rem;
+  font-weight: 800;
+  min-width: 18px; height: 18px;
+  border-radius: 999px;
+  display: flex; align-items: center; justify-content: center;
+  padding: 0 4px;
+}
+
+/* =================== Тулбар =================== */
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin: 20px 0 6px;
+}
+.tool-btn {
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--ink);
+  padding: 8px 14px;
+  border-radius: 999px;
+  font: inherit;
+  font-weight: 700;
+  font-size: .9rem;
+  cursor: pointer;
+  transition: all .15s;
+}
+.tool-btn:hover { border-color: var(--accent); }
+.tool-btn.accent { background: var(--accent); border-color: var(--accent); color: #fff; }
+.tool-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.tool-select {
+  font-size: .85rem;
+  color: var(--muted);
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.tool-select select {
+  font: inherit;
+  font-weight: 700;
+  color: var(--ink);
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 7px 12px;
+  cursor: pointer;
+}
+
+/* =================== Недавние =================== */
+.recent { margin: 14px 0 4px; }
+.recent-title { font-weight: 800; font-size: .95rem; margin-bottom: 10px; }
+.recent-row {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  padding-bottom: 6px;
+  scrollbar-width: thin;
+}
+.recent-card {
+  flex: 0 0 auto;
+  width: 110px;
+  text-decoration: none;
+  color: inherit;
+}
+.recent-img {
+  width: 110px; height: 80px;
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--accent-soft);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.8rem;
+}
+.recent-img img { width: 100%; height: 100%; object-fit: cover; }
+.recent-card span {
+  display: block;
+  font-size: .78rem;
+  font-weight: 600;
+  margin-top: 5px;
+  line-height: 1.25;
+}
+
+/* =================== Звезда избранного на карточке =================== */
+.card-img { position: relative; }
+.fav-star {
+  position: absolute;
+  top: 8px; right: 8px;
+  width: 34px; height: 34px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(0, 0, 0, 0.35);
+  color: #fff;
+  font-size: 1.15rem;
+  line-height: 1;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  backdrop-filter: blur(2px);
+  transition: transform .12s;
+}
+.fav-star:hover { transform: scale(1.12); }
+.fav-star.on { color: #ffd24a; }
+
+/* =================== Действия в карточке рецепта =================== */
+.detail-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding-top: 16px;
+}
+.detail-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.act-btn {
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--ink);
+  padding: 7px 13px;
+  border-radius: 999px;
+  font: inherit;
+  font-weight: 700;
+  font-size: .85rem;
+  cursor: pointer;
+  transition: all .15s;
+}
+.act-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+.detail-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  align-items: center;
+  margin: 4px 0 22px;
+}
+.servings-ctl {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+  color: var(--muted);
+  font-size: .9rem;
+}
+.srv {
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--ink);
+  width: 40px; height: 34px;
+  border-radius: 9px;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all .12s;
+}
+.srv:hover { border-color: var(--accent); }
+.srv.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+/* =================== Чек-боксы ингредиентов =================== */
+.panel h2 .hint { font-size: .72rem; color: var(--muted); font-weight: 600; }
+.ingredients-list li.check-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  padding: 10px 0;
+  cursor: pointer;
+  user-select: none;
+}
+.ingredients-list li.check-item::before { display: none; }
+.cbox {
+  flex: 0 0 auto;
+  width: 20px; height: 20px;
+  border: 2px solid var(--line);
+  border-radius: 6px;
+  margin-top: 1px;
+  position: relative;
+  transition: all .12s;
+}
+.check-item.checked .cbox {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.check-item.checked .cbox::after {
+  content: "✓";
+  position: absolute;
+  inset: 0;
+  color: #fff;
+  font-size: .82rem;
+  font-weight: 800;
+  display: flex; align-items: center; justify-content: center;
+}
+.check-item.checked .ctext { text-decoration: line-through; color: var(--muted); }
+
+/* =================== Шаги: чек + таймер =================== */
+.steps-list li.step-item { cursor: default; }
+.steps-list .step-text { cursor: pointer; }
+.step-item.checked .step-text { text-decoration: line-through; color: var(--muted); }
+.timer-btn {
+  margin-top: 8px;
+  border: 1px solid var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+  padding: 5px 12px;
+  border-radius: 999px;
+  font: inherit;
+  font-weight: 800;
+  font-size: .82rem;
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+}
+.timer-btn.running { background: var(--accent); color: #fff; }
+.timer-btn.done { background: #2e9e5b; border-color: #2e9e5b; color: #fff; }
+
+/* =================== Заметки =================== */
+.notes-panel { margin-top: 22px; }
+.note-area {
+  width: 100%;
+  min-height: 80px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--bg);
+  color: var(--ink);
+  font: inherit;
+  padding: 12px 14px;
+  resize: vertical;
+  outline: none;
+}
+.note-area:focus { border-color: var(--accent); }
+
+/* =================== Список покупок =================== */
+.shopping-list .check-item { padding-right: 4px; }
+.sh-del {
+  margin-left: auto;
+  border: none;
+  background: none;
+  color: var(--muted);
+  font-size: 1rem;
+  cursor: pointer;
+  padding: 0 4px;
+}
+.sh-del:hover { color: var(--accent); }
+
+/* =================== Тост =================== */
+#toast {
+  position: fixed;
+  left: 50%;
+  bottom: 26px;
+  transform: translateX(-50%) translateY(20px);
+  background: var(--ink);
+  color: var(--bg);
+  padding: 12px 20px;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: .9rem;
+  box-shadow: var(--shadow);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .2s, transform .2s;
+  z-index: 50;
+}
+#toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* =================== Печать =================== */
+@media print {
+  .site-header, .toolbar, .tags-bar, .recent, .site-footer,
+  .detail-actions, .detail-controls, .notes-panel, .timer-btn,
+  .back-btn, .fav-star { display: none !important; }
+  body { background: #fff; }
+  .detail-cols { grid-template-columns: 1fr 1.4fr; }
+  .panel { border: none; box-shadow: none; padding: 0; }
+  .detail-hero { max-height: 240px; }
+}

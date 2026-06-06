@@ -2,13 +2,16 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>Мои рецепты</title>
   <meta name="description" content="Личная коллекция рецептов: ингредиенты и способ приготовления." />
+  <meta name="theme-color" content="#e8662a" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/styles.css?v=4" />
+  <link rel="stylesheet" href="css/styles.css?v=7" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍳</text></svg>" />
 </head>
 <body>
@@ -18,13 +21,19 @@
       <div class="search-box">
         <input id="search" type="search" placeholder="Поиск по названию или ингредиенту…" autocomplete="off" />
       </div>
+      <div class="header-actions">
+        <button id="shopping-btn" class="icon-btn" title="Список покупок" aria-label="Список покупок">🛒<span id="shopping-badge" class="badge" hidden></span></button>
+        <button id="theme-btn" class="icon-btn" title="Тёмная тема" aria-label="Тёмная тема">🌙</button>
+      </div>
     </div>
   </header>
 
   <main class="wrap" id="app">
     <!-- Список рецептов -->
     <section id="list-view">
+      <div id="toolbar" class="toolbar"></div>
       <div id="tags" class="tags-bar"></div>
+      <div id="recent" class="recent" hidden></div>
       <div id="count" class="count"></div>
       <div id="grid" class="grid"></div>
       <div id="empty" class="empty" hidden>Ничего не нашлось 🤷 Попробуй другой запрос.</div>
@@ -32,12 +41,15 @@
 
     <!-- Карточка одного рецепта -->
     <article id="detail-view" hidden></article>
+
+    <!-- Список покупок -->
+    <section id="shopping-view" hidden></section>
   </main>
 
   <footer class="site-footer">
     <div class="wrap">Собрано с любовью · обновляется по мере добавления рецептов</div>
   </footer>
 
-  <script src="js/app.js?v=4"></script>
+  <script src="js/app.js?v=7"></script>
 </body>
 </html>
