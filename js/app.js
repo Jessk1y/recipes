@@ -485,7 +485,7 @@ function clearAllTimers() {
   silenceAlarm();
 }
 function startTimerBtn(btn) {
-  keepAlive();                // разблокировать звук + держать «живой» в фоне
+  ensureAudio();              // разблокировать звук по жесту
   requestNotifyPermission();  // спросить разрешение на уведомления
   if (timers.has(btn)) return;
   const total = +btn.dataset.sec;
@@ -512,7 +512,6 @@ function stopTimer(btn) {
   timers.delete(btn);
   btn.classList.remove("running");
   btn.textContent = "⏱ " + fmtClock(+btn.dataset.sec);
-  maybeStopKeepAlive();
 }
 function finishTimer(btn) {
   clearInterval(timers.get(btn));
@@ -578,67 +577,50 @@ function startCustomTimer(total, name) {
   list.appendChild(chip);
   startTimerBtn(btn); // запускаем сразу
 }
-// Звук таймера. Чтобы сигнал мог прозвучать и в фоне, пока идёт хоть один
-// таймер, держим «живой» аудио-элемент (тихий фоновый луп). По окончании —
-// переключаем его на громкий сигнал (элемент уже разблокирован жестом).
-function pcmToWav(int16, rate) {
-  const dataLen = int16.length * 2;
-  const buf = new ArrayBuffer(44 + dataLen), dv = new DataView(buf);
-  let p = 0;
-  const ws = (s) => { for (let i = 0; i < s.length; i++) dv.setUint8(p++, s.charCodeAt(i)); };
-  const w32 = (v) => { dv.setUint32(p, v, true); p += 4; };
-  const w16 = (v) => { dv.setUint16(p, v, true); p += 2; };
-  ws("RIFF"); w32(36 + dataLen); ws("WAVE"); ws("fmt "); w32(16); w16(1); w16(1);
-  w32(rate); w32(rate * 2); w16(2); w16(16); ws("data"); w32(dataLen);
-  for (let i = 0; i < int16.length; i++) { dv.setInt16(p, int16[i], true); p += 2; }
-  let bin = ""; const bytes = new Uint8Array(buf);
-  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
-  return "data:audio/wav;base64," + btoa(bin);
+// Единый AudioContext, создаётся/возобновляется по жесту (клик «старт таймера»)
+let audioCtx = null;
+function ensureAudio() {
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === "suspended") audioCtx.resume();
+  } catch (e) {}
 }
-let bgAudio = null, keepUrl = null, alarmUrl = null, audioMode = "", vibeIv = null, alarmStop = null;
-function initBgAudio() {
-  if (bgAudio) return;
-  // тихий фоновый луп (~неслышный)
-  const r1 = 8000, n1 = Math.floor(r1 * 0.4), s1 = new Int16Array(n1);
-  for (let i = 0; i < n1; i++) s1[i] = Math.round(Math.sin(2 * Math.PI * 55 * i / r1) * 300);
-  keepUrl = pcmToWav(s1, r1);
-  // громкий сигнал «бип-бип-бип»
-  const r2 = 22050, total = 1.6, n2 = Math.floor(r2 * total), s2 = new Int16Array(n2);
-  const beep = 0.18, gap = 0.16, cyc = beep + gap;
-  for (let i = 0; i < n2; i++) {
-    const t = i / r2, ph = t % cyc;
-    if (ph < beep) { const env = Math.sin(Math.PI * ph / beep); s2[i] = Math.round(Math.sin(2 * Math.PI * 988 * i / r2) * 12000 * env); }
-  }
-  alarmUrl = pcmToWav(s2, r2);
-  bgAudio = new Audio();
-  bgAudio.loop = true;
+// Один «звонок» — серия из трёх коротких сигналов
+function ringOnce() {
+  ensureAudio();
+  try {
+    const A = audioCtx;
+    if (A) {
+      const base = A.currentTime;
+      [0, 0.17, 0.34].forEach((off) => {
+        const o = A.createOscillator(), g = A.createGain();
+        o.connect(g); g.connect(A.destination);
+        o.type = "square"; o.frequency.value = 988;
+        const t = base + off;
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(0.6, t + 0.01);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.14);
+        o.start(t); o.stop(t + 0.15);
+      });
+    }
+  } catch (e) {}
+  if (navigator.vibrate) navigator.vibrate([300, 120, 300, 120, 300]);
 }
-function keepAlive() {           // вызывать по жесту (старт таймера)
-  initBgAudio();
-  if (audioMode === "alarm") return;
-  if (audioMode !== "keep") { bgAudio.src = keepUrl; bgAudio.volume = 0.04; audioMode = "keep"; }
-  bgAudio.play().catch(() => {});
-}
+// Будильник: звенит повторно, пока не нажмёшь «Стоп» (или 40 секунд)
+let alarmIv = null, alarmStop = null;
 function startAlarm() {
-  initBgAudio();
-  bgAudio.src = alarmUrl; bgAudio.volume = 1; audioMode = "alarm";
-  bgAudio.play().catch(() => {});
-  if (!vibeIv) { const v = () => { if (navigator.vibrate) navigator.vibrate([300, 150, 300]); }; v(); vibeIv = setInterval(v, 1500); }
-  if (!alarmStop) alarmStop = setTimeout(() => {
+  if (alarmIv) return;
+  ringOnce();
+  alarmIv = setInterval(ringOnce, 1300);
+  alarmStop = setTimeout(() => {
     ringingBtns.forEach((b) => { b.classList.remove("ringing"); b.textContent = "✅ Готово!"; });
     ringingBtns.clear();
     silenceAlarm();
-  }, 60000);
+  }, 40000);
 }
 function silenceAlarm() {
-  if (vibeIv) { clearInterval(vibeIv); vibeIv = null; }
+  if (alarmIv) { clearInterval(alarmIv); alarmIv = null; }
   if (alarmStop) { clearTimeout(alarmStop); alarmStop = null; }
-  if (!bgAudio) return;
-  if (timers.size > 0) { bgAudio.src = keepUrl; bgAudio.volume = 0.04; audioMode = "keep"; bgAudio.play().catch(() => {}); }
-  else { bgAudio.pause(); audioMode = ""; }
-}
-function maybeStopKeepAlive() {
-  if (timers.size === 0 && ringingBtns.size === 0 && bgAudio && audioMode === "keep") { bgAudio.pause(); audioMode = ""; }
 }
 function requestNotifyPermission() {
   try {
