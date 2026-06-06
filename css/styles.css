@@ -662,6 +662,63 @@ body.detail-open .site-header {
 }
 .sh-del:hover { color: var(--accent); }
 
+/* Плашки блюд в корзине + добавление */
+.cart-dishes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin: 4px 0 18px;
+}
+.dish-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  border: 1px solid transparent;
+  padding: 6px 8px 6px 14px;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: .85rem;
+}
+.dish-x {
+  border: none;
+  background: rgba(0, 0, 0, 0.12);
+  color: inherit;
+  width: 20px; height: 20px;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: .75rem;
+  line-height: 1;
+  display: flex; align-items: center; justify-content: center;
+}
+.dish-x:hover { background: var(--accent); color: #fff; }
+.dish-add {
+  font: inherit;
+  font-weight: 700;
+  font-size: .85rem;
+  color: var(--ink);
+  background: var(--card);
+  border: 1px dashed var(--line);
+  border-radius: 999px;
+  padding: 7px 12px;
+  cursor: pointer;
+}
+.dish-add:hover { border-color: var(--accent); }
+
+/* «Звенящая» кнопка завершённого таймера */
+.timer-btn.ringing {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  animation: ringpulse 0.8s ease-in-out infinite;
+}
+@keyframes ringpulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(232, 102, 42, 0.55); }
+  50% { box-shadow: 0 0 0 7px rgba(232, 102, 42, 0); }
+}
+
 /* =================== Тост =================== */
 #toast {
   position: fixed;

@@ -67,8 +67,12 @@ async function load() {
     return;
   }
   state.recipes.forEach((r, i) => (r._order = i)); // новизна = позиция в массиве
-  // миграция старого списка покупок (строки → объекты)
-  store.shopping = store.shopping.map((it) => (typeof it === "string" ? parseIng(it) : it));
+  // миграция списка покупок в формат с привязкой к блюдам {name, contribs:[{r,a}]}
+  store.shopping = store.shopping.map((it) => {
+    if (it && it.contribs) return it;
+    const p = typeof it === "string" ? parseIng(it) : { name: it.name, amount: it.amount };
+    return { name: p.name, contribs: p.amount ? [{ r: null, a: p.amount }] : [] };
+  });
   store.saveShopping();
   buildToolbar();
   buildTags();
@@ -463,6 +467,23 @@ function bindStepChecks(r) {
 
 // ---------- Таймеры ----------
 const timers = new Map();
+const ringingBtns = new Set();
+function handleTimerClick(btn) {
+  if (btn.classList.contains("ringing")) { stopRing(btn); return; }
+  if (timers.has(btn)) stopTimer(btn); else startTimerBtn(btn);
+}
+function stopRing(btn) {
+  ringingBtns.delete(btn);
+  btn.classList.remove("ringing");
+  btn.textContent = "✅ Готово!";
+  if (ringingBtns.size === 0) silenceAlarm();
+}
+function clearAllTimers() {
+  timers.forEach((iv) => clearInterval(iv));
+  timers.clear();
+  ringingBtns.clear();
+  silenceAlarm();
+}
 function startTimerBtn(btn) {
   ensureAudio();              // разблокировать звук по жесту
   requestNotifyPermission();  // спросить разрешение на уведомления
@@ -483,9 +504,7 @@ function bindTimers() {
   document.querySelectorAll(".timer-btn").forEach((btn) => {
     if (btn.dataset.bound) return;
     btn.dataset.bound = "1";
-    btn.addEventListener("click", () => {
-      if (timers.has(btn)) stopTimer(btn); else startTimerBtn(btn);
-    });
+    btn.addEventListener("click", () => handleTimerClick(btn));
   });
 }
 function stopTimer(btn) {
@@ -498,21 +517,22 @@ function finishTimer(btn) {
   clearInterval(timers.get(btn));
   timers.delete(btn);
   btn.classList.remove("running");
-  btn.classList.add("done");
-  btn.textContent = "✅ Готово!";
-  beep();
+  btn.classList.add("done", "ringing");
+  btn.textContent = "🔔 Стоп";
+  ringingBtns.add(btn);
+  startAlarm();
   const title = state.current ? state.current.title : "Рецепт";
   const li = btn.closest(".step-item");
-  let body, tail;
   if (btn.dataset.name) {
-    body = btn.dataset.name + " — готово";
-    tail = " · " + btn.dataset.name;
+    notify(btn.dataset.name, "");          // уведомление — только твоё слово
+    toast("🔔 " + btn.dataset.name);
   } else if (li && li.dataset.stepno) {
-    body = "Шаг " + li.dataset.stepno + " готов — " + shorten(li.querySelector(".step-text").textContent, 90);
-    tail = " · шаг " + li.dataset.stepno;
-  } else { body = "Таймер готов"; tail = ""; }
-  notify("⏱ " + title, body);
-  toast("⏱ Готово: " + title + tail);
+    notify(title, "Шаг " + li.dataset.stepno + " готов");
+    toast("🔔 " + title + " · шаг " + li.dataset.stepno);
+  } else {
+    notify(title, "Таймер готов");
+    toast("🔔 " + title);
+  }
 }
 
 // Свой (произвольный) таймер на странице рецепта
@@ -541,7 +561,7 @@ function startCustomTimer(total, name) {
   if (name) btn.dataset.name = name;
   btn.dataset.bound = "1";
   btn.textContent = "⏱ " + fmtClock(total);
-  btn.addEventListener("click", () => { if (timers.has(btn)) stopTimer(btn); else startTimerBtn(btn); });
+  btn.addEventListener("click", () => handleTimerClick(btn));
   const del = document.createElement("button");
   del.className = "ct-x";
   del.title = "Убрать таймер";
@@ -561,25 +581,42 @@ function ensureAudio() {
     if (audioCtx.state === "suspended") audioCtx.resume();
   } catch (e) {}
 }
-function beep() {
+// Один «звонок» — серия из трёх коротких сигналов
+function ringOnce() {
   ensureAudio();
   try {
     const A = audioCtx;
     if (A) {
       const base = A.currentTime;
-      for (let k = 0; k < 3; k++) {
+      [0, 0.17, 0.34].forEach((off) => {
         const o = A.createOscillator(), g = A.createGain();
         o.connect(g); g.connect(A.destination);
-        o.type = "sine"; o.frequency.value = 880;
-        const t = base + k * 0.35;
+        o.type = "square"; o.frequency.value = 988;
+        const t = base + off;
         g.gain.setValueAtTime(0.0001, t);
-        g.gain.exponentialRampToValueAtTime(0.5, t + 0.02);
-        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.3);
-        o.start(t); o.stop(t + 0.32);
-      }
+        g.gain.exponentialRampToValueAtTime(0.6, t + 0.01);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.14);
+        o.start(t); o.stop(t + 0.15);
+      });
     }
   } catch (e) {}
-  if (navigator.vibrate) navigator.vibrate([300, 150, 300, 150, 300]);
+  if (navigator.vibrate) navigator.vibrate([300, 120, 300, 120, 300]);
+}
+// Будильник: звенит повторно, пока не нажмёшь «Стоп» (или 40 секунд)
+let alarmIv = null, alarmStop = null;
+function startAlarm() {
+  if (alarmIv) return;
+  ringOnce();
+  alarmIv = setInterval(ringOnce, 1300);
+  alarmStop = setTimeout(() => {
+    ringingBtns.forEach((b) => { b.classList.remove("ringing"); b.textContent = "✅ Готово!"; });
+    ringingBtns.clear();
+    silenceAlarm();
+  }, 40000);
+}
+function silenceAlarm() {
+  if (alarmIv) { clearInterval(alarmIv); alarmIv = null; }
+  if (alarmStop) { clearTimeout(alarmStop); alarmStop = null; }
 }
 function requestNotifyPermission() {
   try {
@@ -589,7 +626,9 @@ function requestNotifyPermission() {
 function notify(title, body) {
   try {
     if ("Notification" in window && Notification.permission === "granted") {
-      new Notification(title, { body, icon: "icons/icon-192.png", tag: "timer-" + Date.now() });
+      const opt = { icon: "icons/icon-192.png", tag: "timer-" + Date.now() };
+      if (body) opt.body = body;
+      new Notification(title, opt);
     }
   } catch (e) {}
 }
@@ -630,29 +669,46 @@ function parseIng(str) {
   return { name: str.slice(0, i).trim(), amount: str.slice(i + 1).trim() };
 }
 function normName(n) { return String(n).trim().toLowerCase().replace(/\s+/g, " "); }
-function shoppingText(it) { return it.amount ? it.name + " — " + it.amount : it.name; }
+function shoppingAmount(it) {
+  const seen = [];
+  (it.contribs || []).forEach((c) => { if (c.a && !seen.includes(c.a)) seen.push(c.a); });
+  return seen.join(" + ");
+}
+function shoppingText(it) { const a = shoppingAmount(it); return a ? it.name + " — " + a : it.name; }
+function dishesInCart() {
+  const ids = [];
+  store.shopping.forEach((it) => (it.contribs || []).forEach((c) => { if (c.r && !ids.includes(c.r)) ids.push(c.r); }));
+  return ids;
+}
 
 function addToShopping(r, factor) {
   const checks = (store.checks[r.id] && store.checks[r.id].ing) || {};
-  let added = 0, skipped = 0;
+  let added = 0;
   (r.ingredients || []).forEach((ing, idx) => {
     if (ing && typeof ing === "object") return;      // под-заголовок
-    if (checks[idx]) { skipped++; return; }          // вычеркнутые — уже есть
+    if (checks[idx]) return;                          // вычеркнутые — уже есть
     const { name, amount } = parseIng(scaleQty(String(ing), factor));
     const key = normName(name);
-    const item = store.shopping.find((it) => normName(it.name) === key);
-    if (item) {
-      if (amount) {
-        const have = item.amount.split(" + ").map((s) => s.trim());
-        if (!have.includes(amount)) { item.amount = item.amount ? item.amount + " + " + amount : amount; added++; }
-      }
-    } else {
-      store.shopping.push({ name, amount }); added++;
+    let item = store.shopping.find((it) => normName(it.name) === key);
+    if (!item) { item = { name, contribs: [] }; store.shopping.push(item); }
+    if (!item.contribs.some((c) => c.r === r.id && c.a === amount)) {
+      item.contribs.push({ r: r.id, a: amount }); added++;
     }
   });
   store.saveShopping();
   updateShoppingBadge();
-  toast(added ? "Добавлено в список 🛒" : (skipped ? "Всё уже отмечено/в списке" : "Уже в списке"));
+  toast(added ? "Добавлено в список 🛒" : "Уже в списке");
+}
+function removeDish(id) {
+  store.shopping.forEach((it) => { it.contribs = (it.contribs || []).filter((c) => c.r !== id); });
+  store.shopping = store.shopping.filter((it) => (it.contribs || []).length);
+  store.saveShopping();
+  updateShoppingBadge();
+  renderShopping();
+}
+function addDishFromCart(id) {
+  const r = state.recipes.find((x) => x.id === id);
+  if (r) { addToShopping(r, 1); renderShopping(); }
 }
 function updateShoppingBadge() {
   const n = store.shopping.length;
@@ -661,21 +717,37 @@ function updateShoppingBadge() {
 }
 function renderShopping() {
   const items = store.shopping;
+  const dishIds = dishesInCart();
+  const chips = dishIds.map((id) => {
+    const r = state.recipes.find((x) => x.id === id);
+    return `<span class="dish-chip">${esc(r ? r.title : id)}<button class="dish-x" data-rmdish="${esc(id)}" title="Убрать продукты этого блюда">✕</button></span>`;
+  }).join("");
+  const options = state.recipes
+    .filter((r) => !dishIds.includes(r.id))
+    .map((r) => `<option value="${esc(r.id)}">${esc(r.title)}</option>`).join("");
+  const dishBar = `<div class="cart-dishes">${chips}<select id="addDishSel" class="dish-add"><option value="">＋ добавить блюдо…</option>${options}</select></div>`;
+
   els.shoppingView.innerHTML = `
     <div class="detail-top">
       <button class="back-btn" id="shBack">← К списку</button>
       ${items.length ? `<button class="act-btn" id="shClear">🗑 Очистить</button>` : ""}
     </div>
     <h1 class="detail-title">🛒 Список покупок</h1>
+    ${dishBar}
     ${items.length
       ? `<ul class="ingredients-list shopping-list">${items.map((it, i) =>
           `<li class="check-item" data-sh="${i}"><span class="cbox"></span><span class="ctext">${esc(shoppingText(it))}</span><button class="sh-del" data-del="${i}" title="Удалить">✕</button></li>`).join("")}</ul>`
-      : `<p class="empty">Список пуст. Открой рецепт и нажми «🛒 В список покупок».</p>`}`;
+      : `<p class="empty">Список пуст. Открой рецепт и нажми «🛒 В список покупок», или добавь блюдо выше.</p>`}`;
+
   document.getElementById("shBack").addEventListener("click", () => { location.hash = "#"; });
   const clr = document.getElementById("shClear");
   if (clr) clr.addEventListener("click", () => {
     if (confirm("Очистить весь список покупок?")) { store.shopping = []; store.saveShopping(); updateShoppingBadge(); renderShopping(); }
   });
+  const sel = document.getElementById("addDishSel");
+  if (sel) sel.addEventListener("change", () => { if (sel.value) addDishFromCart(sel.value); });
+  els.shoppingView.querySelectorAll(".dish-x").forEach((b) =>
+    b.addEventListener("click", () => removeDish(b.dataset.rmdish)));
   els.shoppingView.querySelectorAll(".check-item").forEach((li) => {
     li.querySelector(".ctext").addEventListener("click", () => li.classList.toggle("checked"));
     li.querySelector(".cbox").addEventListener("click", () => li.classList.toggle("checked"));
@@ -721,6 +793,7 @@ function applyTheme(theme) {
 function route() {
   const hash = location.hash;
   const m = hash.match(/^#\/recipe\/(.+)$/);
+  clearAllTimers(); // при смене страницы глушим таймеры/звонок
   els.listView.hidden = true; els.detailView.hidden = true; els.shoppingView.hidden = true;
   document.body.classList.remove("detail-open");
   if (m) {
