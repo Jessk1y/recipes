@@ -629,9 +629,23 @@ function requestNotifyPermission() {
 }
 function notify(title, body) {
   try {
-    if ("Notification" in window && Notification.permission === "granted") {
-      const opt = { icon: "icons/icon-192.png", tag: "timer-" + Date.now() };
-      if (body) opt.body = body;
+    if (!("Notification" in window) || Notification.permission !== "granted") return;
+    const opt = {
+      icon: "icons/icon-192.png",
+      badge: "icons/icon-192.png",
+      tag: "timer-" + Date.now(),
+      renotify: true,
+      requireInteraction: true,          // не исчезает само — чтобы не пропустить
+      vibrate: [400, 200, 400, 200, 400], // вибрация в фоне
+      silent: false,                      // разрешить системный звук уведомления
+    };
+    if (body) opt.body = body;
+    // Через service worker — так телефон проигрывает звук/вибрацию даже в фоне.
+    if (navigator.serviceWorker && navigator.serviceWorker.ready) {
+      navigator.serviceWorker.ready
+        .then((reg) => reg.showNotification(title, opt))
+        .catch(() => { try { new Notification(title, opt); } catch (e) {} });
+    } else {
       new Notification(title, opt);
     }
   } catch (e) {}
