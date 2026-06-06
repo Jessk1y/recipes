@@ -762,7 +762,20 @@ window.addEventListener("hashchange", route);
 
 // ---------- PWA ----------
 if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
+  // когда новый service worker берёт управление — один раз перезагружаемся,
+  // чтобы сразу показать свежую версию (авто-обновление).
+  let swRefreshing = false;
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (swRefreshing) return;
+    swRefreshing = true;
+    location.reload();
+  });
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("sw.js").then((reg) => {
+      reg.update();
+      setInterval(() => reg.update(), 60 * 60 * 1000); // проверять обновления раз в час
+    }).catch(() => {});
+  });
 }
 
 initTheme();
