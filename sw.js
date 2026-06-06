@@ -1,10 +1,10 @@
 // Service worker — офлайн-кэш для PWA «Мои рецепты»
-const CACHE = "recipes-v13";
+const CACHE = "recipes-v14";
 const ASSETS = [
   "./",
   "index.html",
-  "css/styles.css?v=13",
-  "js/app.js?v=13",
+  "css/styles.css?v=14",
+  "js/app.js?v=14",
   "manifest.webmanifest",
   "icons/icon-192.png",
   "icons/icon-512.png",
