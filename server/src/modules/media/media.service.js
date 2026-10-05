@@ -13,8 +13,7 @@ async function uploadImage(file, baseUrl) {
   if (!file) throw new AppError(422, "VALIDATION_ERROR", "Нужен файл в поле file");
   const ext = detectImage(file.buffer);
   if (!ext) throw new AppError(415, "UNSUPPORTED_MEDIA_TYPE", "Допустимы только jpeg, png и webp");
-  const { url, publicId } = await storage.save(file.buffer, ext, baseUrl);
-  return { url, publicId, width: null, height: null };
+  return storage.save(file.buffer, ext, baseUrl);
 }
 
 module.exports = { uploadImage };

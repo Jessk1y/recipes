@@ -9,6 +9,7 @@ const testUrl = new URL(process.env.DATABASE_URL);
 testUrl.searchParams.set("schema", "recipes_test");
 process.env.DATABASE_URL = testUrl.toString(); // dotenv не перезаписывает уже заданные переменные
 process.env.NODE_ENV = "test";
+process.env.STORAGE_DRIVER = "local"; // тесты не должны ходить в настоящий Cloudinary, даже если ключ есть в .env
 
 const { test, before, after } = require("node:test");
 const assert = require("node:assert/strict");

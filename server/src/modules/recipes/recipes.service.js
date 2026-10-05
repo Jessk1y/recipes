@@ -3,6 +3,7 @@ const { AppError } = require("../../lib/errors");
 const MAIN_TAGS = require("../../lib/mainTags");
 const { durationSeconds, timeMinutes } = require("../../lib/duration");
 const { slugify } = require("../../lib/slug");
+const logger = require("../../lib/logger");
 const storage = require("../../lib/storage");
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -157,9 +158,21 @@ async function uniqueSlug(tx, base) {
   return slug;
 }
 
-async function write(id, input, authorId) {
+// удаляет загруженное через API фото, если на него больше не ссылается ни один рецепт (чужие URL игнорируются)
+async function releaseImage(url) {
+  if (!url) return;
   try {
-    return await prisma.$transaction(async (tx) => {
+    if ((await prisma.recipe.count({ where: { image: url } })) === 0) await storage.remove(url);
+  } catch (e) {
+    logger.warn({ err: e, url }, "Не удалось удалить старое фото"); // рецепт уже сохранён — не роняем запрос
+  }
+}
+
+async function write(id, input, authorId) {
+  let oldImage = null;
+  let result;
+  try {
+    result = await prisma.$transaction(async (tx) => {
       const category = await tx.category.upsert({
         where: { slug: slugify(input.category) || "bez-kategorii" },
         update: {},
@@ -204,8 +217,9 @@ async function write(id, input, authorId) {
 
       let recipeId = id;
       if (id) {
-        const found = await tx.recipe.findUnique({ where: { id }, select: { id: true } });
+        const found = await tx.recipe.findUnique({ where: { id }, select: { image: true } });
         if (!found) throw notFound();
+        oldImage = found.image;
         await tx.recipeTag.deleteMany({ where: { recipeId: id } });
         await tx.ingredient.deleteMany({ where: { recipeId: id } });
         await tx.step.deleteMany({ where: { recipeId: id } });
@@ -223,6 +237,8 @@ async function write(id, input, authorId) {
     if (e.code === "P2002") throw slugTaken(); // гонка двух одновременных создателей
     throw e;
   }
+  if (oldImage && oldImage !== input.image) await releaseImage(oldImage); // фото заменили — старое больше не нужно
+  return result;
 }
 
 const parseId = (id) => {
@@ -247,7 +263,7 @@ async function remove(id) {
   const r = await prisma.recipe.findUnique({ where: { id: parseId(id) }, select: { image: true } });
   if (!r) throw notFound();
   await prisma.recipe.delete({ where: { id } });
-  await storage.remove(r.image); // фото, загруженное через API, удаляем; чужие URL игнорируются
+  await releaseImage(r.image);
 }
 
 module.exports = { list, getBySlug, random, snapshot, snapshotVersion, create, update, setStatus, remove };

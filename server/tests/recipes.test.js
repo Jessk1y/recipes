@@ -1,5 +1,6 @@
 // Интеграционные тесты API рецептов и загрузки изображений. Нужна БД из DATABASE_URL.
 process.env.NODE_ENV = "test";
+process.env.STORAGE_DRIVER = "local"; // тесты не должны ходить в настоящий Cloudinary, даже если ключ есть в .env
 const fs = require("fs");
 const path = require("path");
 const { test, before, after } = require("node:test");
@@ -250,6 +251,34 @@ test("загрузка фото (заглушка): права, тип по си
   assert.equal(r.status, 201);
   await as(adminToken, "delete", `/recipes/${r.body.id}`);
   assert.equal(fs.existsSync(path.join(UPLOAD_DIR, ok.body.publicId)), false);
+});
+
+test("PUT: при замене фото старое загруженное файл удаляется, общий — нет", async () => {
+  const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(32)]);
+  const up = async () => {
+    const r = await as(adminToken, "post", "/uploads/image").attach("file", png, "a.png");
+    uploaded.push(r.body.publicId);
+    return r.body;
+  };
+  const exists = (u) => fs.existsSync(path.join(UPLOAD_DIR, u.publicId));
+  const [a, b] = [await up(), await up()];
+
+  const r = await as(adminToken, "post", "/recipes").send(input({ title: `Замена фото ${T}`, image: a.url }));
+  const other = await as(adminToken, "post", "/recipes").send(input({ title: `Второй с фото ${T}`, image: a.url }));
+  assert.equal(r.status, 201);
+
+  // на фото A ещё ссылается другой рецепт — не удаляем
+  await as(adminToken, "put", `/recipes/${r.body.id}`).send(input({ title: `Замена фото ${T}`, image: b.url }));
+  assert.equal(exists(a), true);
+  // теперь ссылок на A нет — удаляем; B (новое) остаётся
+  await as(adminToken, "put", `/recipes/${other.body.id}`).send(input({ title: `Второй с фото ${T}`, image: "images/test.jpg" }));
+  assert.equal(exists(a), false);
+  assert.equal(exists(b), true);
+  // тот же URL в PUT — ничего не теряем; сброс фото (null) — удаляет
+  await as(adminToken, "put", `/recipes/${r.body.id}`).send(input({ title: `Замена фото ${T}`, image: b.url }));
+  assert.equal(exists(b), true);
+  await as(adminToken, "put", `/recipes/${r.body.id}`).send(input({ title: `Замена фото ${T}`, image: null }));
+  assert.equal(exists(b), false);
 });
 
 test("DELETE: права, 204, затем 404", async () => {

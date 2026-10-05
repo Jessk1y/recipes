@@ -25,7 +25,22 @@ npm run dev                   # http://localhost:3000/api/v1/health
 | `npm run dev` | сервер с автоперезапуском |
 | `npm run db:seed` | импорт рецептов (идемпотентен, обновляет по slug) |
 | `npm run create-admin -- <email> <пароль> [имя]` | создать/повысить администратора |
+| `npm run db:backup` | копия БД в `server/backups/` (pg_dump через Docker; локальная БД или Neon — по `DATABASE_URL`) |
+| `npm run db:restore -- [файл] --yes` | восстановить БД из копии (по умолчанию — самая свежая); **перезаписывает данные**, без `--yes` только показывает цель |
 | `npm test` | интеграционные тесты (нужна БД) |
+
+## Деплой (Render + Neon + Cloudinary)
+
+- **Render** — веб-сервис по `../render.yaml` (корень репозитория): сборка `npm ci && prisma migrate deploy`,
+  старт `npm start`, проверка `/api/v1/health`. `JWT_SECRET` Render генерирует сам.
+- **Neon** — PostgreSQL; в `DATABASE_URL` нужна прямая (не pooled) строка подключения.
+- **Cloudinary** — фото (`CLOUDINARY_URL`); в production без него сервер не стартует. При замене фото
+  в `PUT /recipes/:id` и при удалении рецепта старый загруженный файл удаляется (если на него не
+  ссылается другой рецепт); чужие URL и `images/…` не трогаются.
+- Seed и `create-admin` для боевой БД запускаются с локальной машины: в окне PowerShell задать
+  `$env:DATABASE_URL` строкой Neon, затем `npm run db:seed`. Резервные копии содержат хэши паролей и
+  не коммитятся (`backups/` в .gitignore). На бесплатном тарифе Render сервис «засыпает» через 15 мин —
+  первый запрос после паузы идёт ~30–60 с.
 
 ## Документация API (Swagger)
 

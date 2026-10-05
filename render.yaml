@@ -1,0 +1,26 @@
+# Blueprint для Render: сервер из папки server/. Секреты здесь не хранятся —
+# значения с sync: false вводятся один раз в панели Render, JWT_SECRET Render генерирует сам.
+services:
+  - type: web
+    name: recipes-api
+    runtime: node
+    region: frankfurt
+    plan: free
+    rootDir: server
+    buildCommand: npm ci && npx prisma generate && npx prisma migrate deploy
+    startCommand: npm start
+    healthCheckPath: /api/v1/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: NODE_ENV
+        value: production
+      - key: CORS_ORIGINS
+        value: https://jessk1y.github.io
+      - key: JWT_SECRET
+        generateValue: true
+      - key: DATABASE_URL
+        sync: false
+      - key: CLOUDINARY_URL
+        sync: false

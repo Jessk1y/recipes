@@ -2,3 +2,6 @@ node_modules/
 .env
 *.log
 uploads/
+
+# Резервные копии БД (в них хэши паролей)
+backups/
