@@ -7,34 +7,9 @@ const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 const DATA_FILE = path.join(__dirname, "..", "..", "data", "recipes.json");
 
-// Контролируемый словарь «основных» тегов (как MAIN_TAGS в js/app.js)
-const MAIN_TAGS = ["Первое", "Второе", "Салат", "Десерт", "Напиток", "Курица", "Свинина", "Говядина", "Шоколад"];
-
-// Та же логика, что stepSeconds() на фронтенде: первая длительность в тексте → секунды
-function durationSeconds(text) {
-  text = String(text);
-  const hreg = /(\d+(?:[.,]\d+)?)\s*(?:ч(?![а-яёА-ЯЁ])|час)(?:\s*(\d+)\s*мин)?/;
-  const mreg = /(\d+)(?:\s*[–—-]\s*(\d+))?\s*мин/;
-  const hm = text.match(hreg);
-  const mm = text.match(mreg);
-  const hi = hm ? hm.index : Infinity;
-  const mi = mm ? mm.index : Infinity;
-  if (hi === Infinity && mi === Infinity) return 0;
-  if (hi <= mi) {
-    let s = parseFloat(hm[1].replace(",", ".")) * 3600;
-    if (hm[2]) s += +hm[2] * 60;
-    return Math.round(s);
-  }
-  return (mm[2] ? +mm[2] : +mm[1]) * 60;
-}
-
-const TRANSLIT = {
-  а: "a", б: "b", в: "v", г: "g", д: "d", е: "e", ё: "e", ж: "zh", з: "z", и: "i", й: "y", к: "k", л: "l",
-  м: "m", н: "n", о: "o", п: "p", р: "r", с: "s", т: "t", у: "u", ф: "f", х: "h", ц: "ts", ч: "ch",
-  ш: "sh", щ: "sch", ъ: "", ы: "y", ь: "", э: "e", ю: "yu", я: "ya",
-};
-const slugify = (s) =>
-  s.toLowerCase().replace(/[а-яё]/g, (c) => TRANSLIT[c]).replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+const MAIN_TAGS = require("../src/lib/mainTags");
+const { durationSeconds, timeMinutes } = require("../src/lib/duration");
+const { slugify } = require("../src/lib/slug");
 
 // «Яйца — 4 шт» → { name: "Яйца", amount: "4 шт" }; без « — » количество пустое
 function parseIngredient(item, position) {
@@ -86,7 +61,7 @@ async function main() {
     if (unknown.length) throw new Error(`${r.id}: теги вне словаря main: ${unknown.join(", ")}`);
 
     const tagKeys = new Set([...(r.main || []), ...(r.tags || [])].map((t) => t.toLowerCase()));
-    const minutes = Math.round(durationSeconds(r.time || "") / 60) || null;
+    const minutes = timeMinutes(r.time);
     const data = {
       title: r.title,
       categoryId: categoryId[r.category],
