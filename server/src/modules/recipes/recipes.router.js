@@ -1,11 +1,11 @@
 const { Router } = require("express");
 const validate = require("../../middleware/validate");
-const { requireAuth, optionalAuth, requireRole } = require("../../middleware/auth");
+const { requireAuth, optionalAuth, requireActiveAdmin } = require("../../middleware/auth");
 const schemas = require("./recipes.schemas");
 const c = require("./recipes.controller");
 
 const router = Router();
-const admin = [requireAuth, requireRole("ADMIN")];
+const admin = [requireAuth, requireActiveAdmin];
 
 // чтение — для всех (админ дополнительно видит черновики)
 router.get("/", optionalAuth, validate.query(schemas.listQuery), c.list);

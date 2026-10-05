@@ -1,5 +1,6 @@
 const crypto = require("crypto");
 const express = require("express");
+const swaggerUi = require("swagger-ui-express");
 const helmet = require("helmet");
 const cors = require("cors");
 const pinoHttp = require("pino-http");
@@ -7,6 +8,7 @@ const env = require("./config/env");
 const logger = require("./lib/logger");
 const prisma = require("./lib/prisma");
 const storage = require("./lib/storage");
+const openapi = require("./docs/openapi");
 const { notFound, errorHandler } = require("./middleware/errorHandler");
 
 const app = express();
@@ -37,6 +39,10 @@ app.use(
   express.static(storage.UPLOAD_DIR, { index: false })
 );
 
+// документация API (Swagger UI) и сама спецификация
+app.get("/api/docs.json", (req, res) => res.json(openapi));
+app.use("/api/docs", swaggerUi.serve, swaggerUi.setup(openapi, { customSiteTitle: "API сайта рецептов" }));
+
 app.use("/api/v1/auth", require("./modules/auth/auth.router"));
 app.use("/api/v1/recipes", require("./modules/recipes/recipes.router"));
 app.get("/api/v1/catalog/snapshot", require("./modules/recipes/recipes.controller").snapshot);
@@ -46,6 +52,7 @@ app.use("/api/v1/uploads", require("./modules/media/media.router"));
 app.use("/api/v1/me/shopping", require("./modules/shopping/shopping.router"));
 app.use("/api/v1/me/sync", require("./modules/sync/sync.router"));
 app.use("/api/v1/me", require("./modules/me/me.router"));
+app.use("/api/v1/admin", require("./modules/admin/admin.router"));
 
 app.use(notFound);
 app.use(errorHandler);

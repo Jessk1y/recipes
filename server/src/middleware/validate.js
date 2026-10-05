@@ -27,3 +27,13 @@ module.exports.query = (schema) => (req, res, next) => {
     next(e);
   }
 };
+
+// validate.params(schema) — то же для параметров пути (/:id)
+module.exports.params = (schema) => (req, res, next) => {
+  try {
+    check(schema, req.params);
+    next();
+  } catch (e) {
+    next(e);
+  }
+};

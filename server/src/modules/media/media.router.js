@@ -1,7 +1,7 @@
 const { Router } = require("express");
 const multer = require("multer");
 const { AppError } = require("../../lib/errors");
-const { requireAuth, requireRole } = require("../../middleware/auth");
+const { requireAuth, requireActiveAdmin } = require("../../middleware/auth");
 const service = require("./media.service");
 
 const MAX_BYTES = 5 * 1024 * 1024;
@@ -10,7 +10,7 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX
 const router = Router();
 
 // проверка прав — до multer, чтобы не принимать файл от неавторизованного
-router.post("/image", requireAuth, requireRole("ADMIN"), (req, res, next) => {
+router.post("/image", requireAuth, requireActiveAdmin, (req, res, next) => {
   upload(req, res, (err) => {
     if (err?.code === "LIMIT_FILE_SIZE") return next(new AppError(413, "FILE_TOO_LARGE", "Файл больше 5 МБ"));
     if (err) return next(new AppError(422, "VALIDATION_ERROR", "Некорректная загрузка файла"));
