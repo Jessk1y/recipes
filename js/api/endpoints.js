@@ -1,0 +1,40 @@
+// Вызовы конкретных эндпоинтов API (/api/v1).
+import { SLOW_TIMEOUT } from "../config.js";
+import { api, raw } from "./client.js";
+
+const slow = { timeout: SLOW_TIMEOUT };
+const post = (body) => ({ method: "POST", body, ...slow });
+
+// ---------- auth ----------
+export const login = (email, password) => raw("/auth/login", post({ email, password }));
+export const register = (email, password, displayName) => raw("/auth/register", post({ email, password, displayName }));
+export const logout = (refreshToken) => api("/auth/logout", { auth: true, method: "POST", body: { refreshToken }, timeout: 10000 });
+export const me = () => api("/auth/me", { auth: true, ...slow });
+
+// ---------- каталог ----------
+// cache: "no-cache" — браузер сам отправит If-None-Match и при неизменном каталоге получит короткий 304
+export const snapshot = () => raw("/catalog/snapshot", { cache: "no-cache", ...slow });
+
+// ---------- личные данные ----------
+export const sync = (ops) => api("/me/sync", { auth: true, ...post({ ops }) });
+
+// ---------- админка ----------
+export async function adminRecipes() {
+  const all = [];
+  for (let page = 1; ; page++) {
+    const r = await api(`/recipes?status=all&limit=50&page=${page}`, { auth: true, ...slow });
+    all.push(...r.items);
+    if (all.length >= r.total || !r.items.length) return all;
+  }
+}
+export const adminRecipe = (slug) => api(`/recipes/${encodeURIComponent(slug)}`, { auth: true, ...slow });
+export const categories = () => raw("/categories", slow);
+export const createRecipe = (input) => api("/recipes", { auth: true, ...post(input) });
+export const updateRecipe = (id, input) => api(`/recipes/${id}`, { auth: true, method: "PUT", body: input, ...slow });
+export const setRecipeStatus = (id, status) => api(`/recipes/${id}/status`, { auth: true, method: "PATCH", body: { status }, ...slow });
+export const deleteRecipe = (id) => api(`/recipes/${id}`, { auth: true, method: "DELETE", ...slow });
+export function uploadImage(file) {
+  const form = new FormData();
+  form.append("file", file);
+  return api("/uploads/image", { auth: true, method: "POST", form, ...slow });
+}

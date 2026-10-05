@@ -341,6 +341,9 @@ body.detail-open .site-header {
   .card-img { font-size: 2.4rem; }
   .mini-tag { font-size: .68rem; padding: 2px 7px; }
   .card-meta { font-size: .78rem; gap: 8px; }
+  /* шапка: логотип и кнопки в первом ряду, поиск — во втором на всю ширину */
+  .header-actions { margin-left: auto; }
+  .search-box { order: 3; flex-basis: 100%; }
 }
 
 /* =================== Тёмная тема =================== */
@@ -738,6 +741,79 @@ body.detail-open .site-header {
   z-index: 50;
 }
 #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* =================== Аккаунт =================== */
+#account-view, #admin-view { padding: 24px 0 60px; }
+.account-btn.signed-in {
+  background: var(--accent); border-color: var(--accent); color: #fff;
+  font-weight: 800; font-size: 1rem;
+}
+.sync-dot {
+  position: absolute; top: -2px; right: -2px;
+  width: 11px; height: 11px; border-radius: 50%;
+  background: #f2b33d; border: 2px solid var(--bg);
+}
+.sync-dot.off { background: var(--muted); }
+.auth-panel { max-width: 460px; margin: 0 auto; }
+.auth-tabs { display: flex; gap: 8px; margin-bottom: 12px; }
+.auth-hint { color: var(--muted); font-size: .9rem; margin: 0 0 16px; }
+.auth-hint.small { font-size: .8rem; margin-top: 18px; }
+.sync-line { font-weight: 700; margin: 0 0 16px; }
+
+/* =================== Формы =================== */
+.form { display: flex; flex-direction: column; gap: 14px; }
+.field { display: flex; flex-direction: column; gap: 6px; font-weight: 700; font-size: .9rem; min-width: 0; }
+.field .hint { color: var(--muted); font-weight: 600; font-size: .78rem; }
+.field .ct-input { width: 100%; font-size: 1rem; }
+fieldset.field { border: none; padding: 0; margin: 0; }
+fieldset.field legend { padding: 0; margin-bottom: 6px; }
+.field-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; }
+.form-msg { padding: 10px 14px; border-radius: 12px; font-weight: 700; font-size: .9rem; background: var(--accent-soft); }
+.form-msg[hidden] { display: none; }
+.form-msg.err { background: #fde3e0; color: #a3271b; }
+.form-msg.info { background: var(--accent-soft); color: var(--ink); }
+:root[data-theme="dark"] .form-msg.err { background: #4a1f1b; color: #ffb4a8; }
+.form .tool-btn:disabled, .act-btn:disabled { opacity: .55; cursor: default; }
+select.ct-input { cursor: pointer; }
+
+/* =================== Админка =================== */
+.admin-search { margin: 0 0 6px; max-width: 420px; }
+.admin-list { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.admin-row {
+  display: flex; align-items: center; gap: 12px;
+  background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px;
+}
+.admin-thumb { width: 64px; height: 48px; flex: none; margin: 0; font-size: 1.5rem; }
+.admin-info { flex: 1; min-width: 0; }
+.admin-title { font-weight: 800; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.admin-sub { color: var(--muted); font-size: .8rem; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.admin-sub code { font-size: .75rem; }
+.admin-btns { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+a.act-btn { text-decoration: none; display: inline-flex; align-items: center; }
+.act-btn.danger:hover { border-color: #c0392b; color: #c0392b; }
+.status-badge { font-weight: 800; font-size: .72rem; padding: 2px 8px; border-radius: 999px; }
+.status-badge.pub { background: #dff3e6; color: #1e7a45; }
+.status-badge.draft { background: var(--accent-soft); color: var(--accent); }
+:root[data-theme="dark"] .status-badge.pub { background: #1d3a29; color: #8fe0ae; }
+.admin-form { max-width: 760px; }
+.admin-area { min-height: 200px; font-family: inherit; }
+.main-tags { display: flex; flex-wrap: wrap; gap: 8px; }
+.tag-check {
+  display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--card); border-radius: 999px;
+  padding: 6px 12px; font-weight: 700; font-size: .88rem;
+}
+.tag-check input { accent-color: var(--accent); }
+.photo-box { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+.photo-preview { width: 220px; aspect-ratio: 4 / 3; height: auto; margin: 0; display: flex; align-items: center; justify-content: center; }
+.photo-empty { color: var(--muted); font-size: .85rem; font-weight: 600; padding: 10px; text-align: center; }
+.photo-btns { display: flex; flex-direction: column; gap: 8px; }
+.file-btn { display: inline-block; text-align: center; }
+@media (max-width: 640px) {
+  .admin-row { flex-wrap: wrap; }
+  .admin-btns { width: 100%; justify-content: flex-start; }
+  .photo-preview { width: 100%; }
+}
 
 /* =================== Печать =================== */
 @media print {

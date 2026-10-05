@@ -13,7 +13,9 @@
     "create-admin": "node scripts/create-admin.js",
     "test": "node --test tests/",
     "db:backup": "node scripts/db-backup.js",
-    "db:restore": "node scripts/db-restore.js"
+    "db:restore": "node scripts/db-restore.js",
+    "recipes:import": "node scripts/recipes-import.js",
+    "catalog:export": "node scripts/catalog-export.js"
   },
   "engines": {
     "node": ">=20"

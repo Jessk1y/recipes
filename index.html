@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/styles.css?v=15" />
+  <link rel="stylesheet" href="css/styles.css?v=16" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍳</text></svg>" />
 </head>
 <body>
@@ -23,6 +23,7 @@
       </div>
       <div class="header-actions">
         <button id="shopping-btn" class="icon-btn" title="Список покупок" aria-label="Список покупок">🛒<span id="shopping-badge" class="badge" hidden></span></button>
+        <button id="account-btn" class="icon-btn account-btn" title="Войти" aria-label="Аккаунт">👤</button>
         <button id="theme-btn" class="icon-btn" title="Тёмная тема" aria-label="Тёмная тема">🌙</button>
       </div>
     </div>
@@ -44,12 +45,18 @@
 
     <!-- Список покупок -->
     <section id="shopping-view" hidden></section>
+
+    <!-- Вход / аккаунт -->
+    <section id="account-view" hidden></section>
+
+    <!-- Админ-панель рецептов -->
+    <section id="admin-view" hidden></section>
   </main>
 
   <footer class="site-footer">
     <div class="wrap">Собрано с любовью · обновляется по мере добавления рецептов</div>
   </footer>
 
-  <script src="js/app.js?v=15"></script>
+  <script type="module" src="js/main.js?v=16"></script>
 </body>
 </html>
