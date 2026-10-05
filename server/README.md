@@ -25,7 +25,7 @@ npm run dev                   # http://localhost:3000/api/v1/health
 | `npm run dev` | сервер с автоперезапуском |
 | `npm run db:seed` | импорт рецептов (идемпотентен, обновляет по slug) |
 | `npm run create-admin -- <email> <пароль> [имя]` | создать/повысить администратора |
-| `npm test` | интеграционные тесты auth (нужна БД) |
+| `npm test` | интеграционные тесты (нужна БД) |
 
 ## Auth API (`/api/v1/auth`)
 
@@ -65,3 +65,44 @@ ingredients: [{kind?: "ITEM"|"HEADER", name, amount?}], steps: [{kind?, text, ti
 
 **Загрузка фото — заглушка:** файлы лежат в `server/uploads/` (не в git). Перед деплоем
 `src/lib/storage.js` заменяется на Cloudinary с тем же интерфейсом `save` / `remove`.
+
+## Личные данные (`/api/v1/me`) — только для вошедшего
+
+Все пути требуют `Authorization: Bearer <access>`; каждый запрос ограничен `userId` из токена, чужие
+данные недостижимы (чужой id позиции даёт тот же 404, что и несуществующий). Рецепты адресуются по
+`slug` (на фронтенде это `recipe.id`); годятся только опубликованные.
+
+| Метод | Путь | Описание |
+|---|---|---|
+| GET | `/me/favorites` | `{items: [{slug, createdAt}]}`, новые сверху |
+| PUT / DELETE | `/me/favorites/:slug` | добавить / убрать, идемпотентно, 204. Неизвестный или черновой slug → 404 |
+| GET | `/me/notes` | `{items: [{slug, text, updatedAt}]}` |
+| PUT | `/me/notes/:slug` | `{text ≤ 2000}` → 200 `{slug, text, updatedAt}`; пустой текст удаляет (204) |
+| DELETE | `/me/notes/:slug` | 204 |
+| GET | `/me/shopping` | `{items: [{id, name, checked, contribs: [{r: slug\|null, a: "количество"}]}]}` в порядке добавления |
+| POST | `/me/shopping/items` | `{items: [{name, amount?, recipe?}]}` (до 100) → `{added, items}`. Одинаковые названия (без учёта регистра и пробелов) сливаются в одну позицию, одинаковый вклад (блюдо + количество) не дублируется; неизвестное блюдо → 404, ничего не добавляется |
+| PATCH | `/me/shopping/items/:id` | `{checked}` → `{items}` |
+| DELETE | `/me/shopping/items/:id` | 204 |
+| DELETE | `/me/shopping/dishes/:slug` | «убрать блюдо»: вклады блюда удаляются, пустые позиции пропадают → `{items}` |
+| DELETE | `/me/shopping` | очистить список, 204 |
+| POST | `/me/sync` | синхронизация офлайн-очереди (ниже) |
+
+### POST /me/sync
+
+Клиент шлёт накопленный outbox `{ops: [...]}` (до 200 операций; тело ≤ 100 КБ, иначе 413).
+Каждая операция содержит `type` и `at` (ISO 8601, время действия по часам клиента):
+`favorite.add|remove {slug}`, `note.set {slug, text}`, `note.remove {slug}`,
+`shopping.add {name, amount?, recipe?}`, `shopping.remove {name}`, `shopping.check {name, checked}`,
+`shopping.removeDish {slug}`, `shopping.clear`.
+
+Сервер применяет их одной транзакцией в порядке `at` (всё или ничего) и отвечает
+`{serverTime, applied, skipped: [{index, type, reason}], favorites, notes, shopping}` — актуальным
+состоянием целиком. Правила конфликтов (last-write-wins):
+
+- заметки сравниваются по `updatedAt`: правка старше сохранённой пропускается (`STALE`);
+- избранное и покупки: операции идемпотентны, при конфликте побеждает последняя по `at`;
+- `at` из будущего обрезается до времени сервера; неизвестный/черновой рецепт — `NOT_FOUND` (операция
+  пропускается, остальные применяются).
+
+Ограничение: удаления не хранятся как «надгробия» — запоздавший старый `note.set` после
+`note.remove` с другого устройства восстановит заметку.

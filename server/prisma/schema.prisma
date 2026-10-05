@@ -169,11 +169,12 @@ model Note {
 }
 
 model ShoppingItem {
-  id       String  @id @default(uuid()) @db.Uuid
-  userId   String  @map("user_id") @db.Uuid
-  name     String
-  normName String  @map("norm_name")
-  checked  Boolean @default(false)
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  name      String
+  normName  String   @map("norm_name")
+  checked   Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
 
   user     User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   contribs ShoppingContrib[]
@@ -184,10 +185,11 @@ model ShoppingItem {
 
 // recipeId пуст у позиций, добавленных вручную
 model ShoppingContrib {
-  id       String  @id @default(uuid()) @db.Uuid
-  itemId   String  @map("item_id") @db.Uuid
-  recipeId String? @map("recipe_id") @db.Uuid
-  amount   String? @db.VarChar(200)
+  id        String   @id @default(uuid()) @db.Uuid
+  itemId    String   @map("item_id") @db.Uuid
+  recipeId  String?  @map("recipe_id") @db.Uuid
+  amount    String?  @db.VarChar(200)
+  createdAt DateTime @default(now()) @map("created_at")
 
   item   ShoppingItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
   recipe Recipe?      @relation(fields: [recipeId], references: [id], onDelete: Cascade)

@@ -12,6 +12,9 @@ function errorHandler(err, req, res, next) {
   if (err.type === "entity.parse.failed") {
     err = new AppError(400, "BAD_JSON", "Некорректный JSON");
   }
+  if (err.type === "entity.too.large") {
+    err = new AppError(413, "PAYLOAD_TOO_LARGE", "Слишком большое тело запроса");
+  }
   if (err instanceof AppError) {
     return res.status(err.status).json({
       error: { code: err.code, message: err.message, details: err.details ?? null },
