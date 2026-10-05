@@ -1,0 +1,198 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum RecipeStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum ItemKind {
+  ITEM
+  HEADER
+}
+
+model User {
+  id           String   @id @default(uuid()) @db.Uuid
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  displayName  String   @map("display_name")
+  role         Role     @default(USER)
+  isBlocked    Boolean  @default(false) @map("is_blocked")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  refreshTokens RefreshToken[]
+  recipes       Recipe[]
+  favorites     Favorite[]
+  notes         Note[]
+  shoppingItems ShoppingItem[]
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  tokenHash String    @unique @map("token_hash")
+  familyId  String    @map("family_id") @db.Uuid
+  expiresAt DateTime  @map("expires_at")
+  revokedAt DateTime? @map("revoked_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([familyId])
+  @@map("refresh_tokens")
+}
+
+model Category {
+  id      String   @id @default(uuid()) @db.Uuid
+  name    String   @unique
+  slug    String   @unique
+  recipes Recipe[]
+
+  @@map("categories")
+}
+
+model Tag {
+  id      String      @id @default(uuid()) @db.Uuid
+  name    String      @unique
+  isMain  Boolean     @default(false) @map("is_main")
+  recipes RecipeTag[]
+
+  @@map("tags")
+}
+
+model Recipe {
+  id          String       @id @default(uuid()) @db.Uuid
+  slug        String       @unique
+  title       String
+  categoryId  String       @map("category_id") @db.Uuid
+  authorId    String?      @map("author_id") @db.Uuid
+  image       String?
+  timeText    String?      @map("time_text")
+  timeMinutes Int?         @map("time_minutes")
+  servings    String?
+  status      RecipeStatus @default(PUBLISHED)
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+
+  category    Category          @relation(fields: [categoryId], references: [id])
+  author      User?             @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  tags        RecipeTag[]
+  ingredients Ingredient[]
+  steps       Step[]
+  favorites   Favorite[]
+  notes       Note[]
+  contribs    ShoppingContrib[]
+
+  @@index([status, createdAt])
+  @@index([timeMinutes])
+  @@map("recipes")
+}
+
+model RecipeTag {
+  recipeId String @map("recipe_id") @db.Uuid
+  tagId    String @map("tag_id") @db.Uuid
+
+  recipe Recipe @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  tag    Tag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([recipeId, tagId])
+  @@index([tagId])
+  @@map("recipe_tags")
+}
+
+// kind = HEADER: подзаголовок («Для соуса»), хранится в name, amount пуст
+model Ingredient {
+  id       String   @id @default(uuid()) @db.Uuid
+  recipeId String   @map("recipe_id") @db.Uuid
+  position Int
+  kind     ItemKind @default(ITEM)
+  name     String
+  amount   String?
+
+  recipe Recipe @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+
+  @@unique([recipeId, position])
+  @@map("ingredients")
+}
+
+model Step {
+  id           String   @id @default(uuid()) @db.Uuid
+  recipeId     String   @map("recipe_id") @db.Uuid
+  position     Int
+  kind         ItemKind @default(ITEM)
+  text         String
+  timerSeconds Int?     @map("timer_seconds")
+
+  recipe Recipe @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+
+  @@unique([recipeId, position])
+  @@map("steps")
+}
+
+model Favorite {
+  userId    String   @map("user_id") @db.Uuid
+  recipeId  String   @map("recipe_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  recipe Recipe @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+
+  @@id([userId, recipeId])
+  @@map("favorites")
+}
+
+model Note {
+  userId    String   @map("user_id") @db.Uuid
+  recipeId  String   @map("recipe_id") @db.Uuid
+  text      String   @db.VarChar(2000)
+  updatedAt DateTime @map("updated_at")
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  recipe Recipe @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+
+  @@id([userId, recipeId])
+  @@map("notes")
+}
+
+model ShoppingItem {
+  id       String  @id @default(uuid()) @db.Uuid
+  userId   String  @map("user_id") @db.Uuid
+  name     String
+  normName String  @map("norm_name")
+  checked  Boolean @default(false)
+
+  user     User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  contribs ShoppingContrib[]
+
+  @@unique([userId, normName])
+  @@map("shopping_items")
+}
+
+// recipeId пуст у позиций, добавленных вручную
+model ShoppingContrib {
+  id       String  @id @default(uuid()) @db.Uuid
+  itemId   String  @map("item_id") @db.Uuid
+  recipeId String? @map("recipe_id") @db.Uuid
+  amount   String? @db.VarChar(200)
+
+  item   ShoppingItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  recipe Recipe?      @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+
+  @@index([itemId])
+  @@index([recipeId])
+  @@map("shopping_contribs")
+}
