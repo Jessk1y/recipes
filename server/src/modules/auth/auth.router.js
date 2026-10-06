@@ -8,11 +8,10 @@ const c = require("./auth.controller");
 
 const router = Router();
 
-// ограничение частоты запросов к /auth (защита от перебора паролей); письма — строже
-router.use(limiters.auth);
-
-router.post("/register", requireCaptcha, validate(schemas.register), c.register);
-router.post("/login", validate(schemas.login), c.login);
+// лимиты точечные: /refresh и /me — только общий лимит API (за общим IP их делают все сразу);
+// вход — мягкий по IP + строгий по паре IP+e-mail; регистрация — по IP; письма — строже
+router.post("/register", limiters.register, requireCaptcha, validate(schemas.register), c.register);
+router.post("/login", limiters.loginIp, validate(schemas.login), limiters.loginPair, c.login);
 router.post("/refresh", validate(schemas.refresh), c.refresh);
 router.post("/logout", requireAuth, validate(schemas.logout), c.logout);
 router.post("/verify-email", validate(schemas.tokenOnly), c.verifyEmail);

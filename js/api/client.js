@@ -50,7 +50,11 @@ export async function raw(path, { method = "GET", body, form, token, timeout = 1
   }
   if (!res.ok) {
     const err = (json && json.error) || {};
-    throw new ApiError(res.status, err.code || "HTTP_" + res.status, err.message || "Ошибка сервера", err.details);
+    const apiErr = new ApiError(res.status, err.code || "HTTP_" + res.status, err.message || "Ошибка сервера", err.details);
+    // 429: сервер просит подождать — вызывающий код повторяет позже, сессию не трогаем
+    const wait = Number(res.headers.get("Retry-After"));
+    if (res.status === 429 && wait > 0) apiErr.retryAfter = wait * 1000;
+    throw apiErr;
   }
   return json;
 }
@@ -69,6 +73,7 @@ export function refreshAccess() {
         accessToken = r.accessToken;
         saveAuth({ ...auth, refreshToken: r.refreshToken });
       } catch (e) {
+        // разлогиниваем только по 401/403; 429 (общий IP упёрся в лимит), 5xx и сеть — просто повторим позже
         if (e instanceof ApiError && (e.status === 401 || e.status === 403)) {
           clearAuth();
           onSessionLost(e);

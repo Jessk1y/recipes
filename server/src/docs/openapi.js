@@ -799,7 +799,7 @@ module.exports = {
     description:
       "Все пути — под префиксом `/api/v1`. Access-токен (JWT, 15 минут) передаётся как `Authorization: Bearer …`; " +
       "refresh-токен обновляется через `/auth/refresh`. Ошибки имеют единый формат `{error: {code, message, details}}`.\n\n" +
-      "**Лимиты запросов** (по IP, ответ `429 RATE_LIMITED`, заголовки `RateLimit-*`): всё API — 600 за 15 минут; запись (POST/PUT/PATCH/DELETE) — 150 за 15 минут; `/me/sync` — 300 за 15 минут; `/auth` — 30 за 15 минут; письма (`forgot-password`, `resend-verification`) — 10 в час. `/health` без лимита.\n\n" +
+      "**Лимиты запросов** (по IP, ответ `429 RATE_LIMITED`, заголовки `RateLimit-*`): всё API — 3000 за 15 минут; запись (POST/PUT/PATCH/DELETE) — 150 за 15 минут; `/me/sync` — 1500 за 15 минут; просмотры рецептов — 600 за 15 минут; вход — 10 неудачных попыток за 15 минут на пару IP+e-mail и 200 за 15 минут по IP; регистрация — 50 за 15 минут по IP (`/auth/refresh` и `/auth/me` — только общий лимит); письма (`forgot-password`, `resend-verification`) — 10 в час. `/health` без лимита.\n\n" +
       "Чтобы пробовать защищённые методы: выполните `/auth/login`, скопируйте `accessToken` и нажмите **Authorize**.",
   },
   servers: [{ url: "/api/v1", description: "Текущий сервер" }],

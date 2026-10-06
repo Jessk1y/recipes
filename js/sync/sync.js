@@ -77,7 +77,7 @@ export function flush() {
       } else {
         const offline = e instanceof NetworkError;
         dispatch({ type: "sync.status", patch: { status: offline ? "offline" : "error", error: e.message } });
-        scheduleFlush(RETRY_DELAY);
+        scheduleFlush(Math.max(RETRY_DELAY, e.retryAfter || 0));
       }
       throw e;
     }

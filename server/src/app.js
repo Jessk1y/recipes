@@ -16,7 +16,7 @@ const app = express();
 if (env.isProd) app.set("trust proxy", 1); // за прокси Render — реальный IP клиента для rate-limit
 
 app.use(helmet());
-app.use(cors({ origin: env.corsOrigins }));
+app.use(cors({ origin: env.corsOrigins, exposedHeaders: ["Retry-After"] }));
 app.use(express.json({ limit: "100kb" }));
 app.use(pinoHttp({ logger, genReqId: () => crypto.randomUUID() }));
 
