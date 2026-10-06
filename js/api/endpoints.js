@@ -7,8 +7,8 @@ const post = (body) => ({ method: "POST", body, ...slow });
 
 // ---------- auth ----------
 export const login = (email, password) => raw("/auth/login", post({ email, password }));
-export const register = (email, password, confirmPassword, displayName) =>
-  raw("/auth/register", post({ email, password, confirmPassword, displayName }));
+export const register = (email, password, confirmPassword, displayName, turnstileToken) =>
+  raw("/auth/register", post({ email, password, confirmPassword, displayName, ...(turnstileToken && { turnstileToken }) }));
 export const verifyEmail = (token) => raw("/auth/verify-email", post({ token }));
 export const resendVerification = () => api("/auth/resend-verification", { auth: true, ...post() });
 export const forgotPassword = (email) => raw("/auth/forgot-password", post({ email }));

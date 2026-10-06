@@ -61,9 +61,9 @@ const paths = {
       tags: ["Авторизация"],
       summary: "Регистрация",
       description:
-        "Создаёт пользователя с ролью USER, открывает сессию и отправляет письмо со ссылкой подтверждения e-mail (если почта недоступна, регистрация всё равно проходит — `verificationSent: false`, письмо можно запросить повторно). Пароль нужно ввести дважды (`confirmPassword`). Неподтверждённые аккаунты старше 7 дней удаляются. Лимит: 30 запросов за 15 минут на весь `/auth`.",
+        "Создаёт пользователя с ролью USER, открывает сессию и отправляет письмо со ссылкой подтверждения e-mail (если почта недоступна, регистрация всё равно проходит — `verificationSent: false`, письмо можно запросить повторно). Пароль нужно ввести дважды (`confirmPassword`). Неподтверждённые аккаунты старше 7 дней удаляются; аккаунты без единого действия (вход, синхронизация, предложение) старше 30 дней — тоже. Если на сервере включена капча (`turnstileSiteKey` в `/config` не null), нужен токен `turnstileToken` из виджета Cloudflare Turnstile. E-mail Gmail сравнивается без точек и `+метки` (`a.b+x@gmail.com` = `ab@gmail.com`). Лимит: 30 запросов за 15 минут на весь `/auth`; кроме того, более 100 регистраций за час на весь сайт — временный отказ 429 `REGISTRATION_PAUSED` (заголовок `Retry-After`).",
       requestBody: body(ref("RegisterInput")),
-      responses: { 201: ok("Пользователь создан", ref("Session")), 409: err("E-mail занят (`EMAIL_TAKEN`)"), 422: err("Ошибка валидации (`VALIDATION_ERROR`, в т.ч. не-ASCII e-mail), одноразовый домен (`EMAIL_DISPOSABLE`) опечатка в популярном домене (`EMAIL_TYPO`) или домен без приёма почты (`EMAIL_DOMAIN_INVALID`, в т.ч. MX в «чёрную дыру»)"), 429: E[429] },
+      responses: { 201: ok("Пользователь создан", ref("Session")), 400: err("Нет токена капчи (`CAPTCHA_REQUIRED`) или проверка не пройдена (`CAPTCHA_FAILED`)"), 409: err("E-mail занят (`EMAIL_TAKEN`), в т.ч. другой вариант записи того же адреса Gmail"), 422: err("Ошибка валидации (`VALIDATION_ERROR`, в т.ч. не-ASCII e-mail), одноразовый домен (`EMAIL_DISPOSABLE`) опечатка в популярном домене (`EMAIL_TYPO`) или домен без приёма почты (`EMAIL_DOMAIN_INVALID`, в т.ч. MX в «чёрную дыру»)"), 429: err("Лимит запросов (`RATE_LIMITED`) или регистрация временно приостановлена (`REGISTRATION_PAUSED`)"), 503: err("Капча временно недоступна (`CAPTCHA_UNAVAILABLE`)") },
     },
   },
   "/auth/login": {
@@ -265,7 +265,7 @@ const paths = {
       tags: ["Справочники"],
       summary: "Публичные настройки сервера",
       description: "`mailEnabled: false` — почта отключена: e-mail не подтверждается (все считаются подтверждёнными), «забыли пароль» и повторная отправка письма отвечают 503 `MAIL_DISABLED`. Фронтенд по этому флагу прячет соответствующие элементы.",
-      responses: { 200: ok("Настройки", obj({ mailEnabled: bool, submissionsPerDay: int })) },
+      responses: { 200: ok("Настройки", obj({ mailEnabled: bool, submissionsPerDay: int, turnstileSiteKey: { type: "string", nullable: true, description: "Публичный ключ виджета Cloudflare Turnstile; null — капча выключена" } })) },
     },
   },
   "/tags": {
@@ -448,10 +448,10 @@ const paths = {
       tags: ["Предложения рецептов"],
       summary: "Предложить рецепт",
       description:
-        "Нужен подтверждённый e-mail (403 `EMAIL_NOT_VERIFIED`). Рецепт уходит на модерацию (`PENDING`). Поля `slug` и `status` игнорируются; категория — только существующая; фото — только загруженное через `/uploads/image`; до 10 тегов. Лимит — `SUBMISSIONS_PER_DAY` (3) отправок за 24 часа: 429 `SUBMISSION_LIMIT`.",
+        "Нужен подтверждённый e-mail (403 `EMAIL_NOT_VERIFIED`). Рецепт уходит на модерацию (`PENDING`). Поля `slug` и `status` игнорируются; категория — только существующая; фото — только загруженное через `/uploads/image`; до 10 тегов. Лимит — `SUBMISSIONS_PER_DAY` (3) отправок за 24 часа: 429 `SUBMISSION_LIMIT`. При включённой капче нужен `turnstileToken` (400 `CAPTCHA_REQUIRED` / `CAPTCHA_FAILED`, 503 `CAPTCHA_UNAVAILABLE`); у `PUT` капчи нет.",
       security: auth,
       requestBody: body(ref("SubmissionInput")),
-      responses: { 201: ok("Предложение создано", ref("Submission")), 401: E[401], 403: E[403], 422: E[422], 429: err("Лимит предложений (`SUBMISSION_LIMIT`) или общий лимит запросов") },
+      responses: { 201: ok("Предложение создано", ref("Submission")), 400: err("Капча: `CAPTCHA_REQUIRED` / `CAPTCHA_FAILED`"), 401: E[401], 403: E[403], 422: E[422], 503: err("Капча временно недоступна (`CAPTCHA_UNAVAILABLE`)"), 429: err("Лимит предложений (`SUBMISSION_LIMIT`) или общий лимит запросов") },
     },
   },
   "/me/submissions/{id}": {
@@ -674,6 +674,7 @@ const schemas = {
       password: str({ minLength: 8, maxLength: 72 }),
       confirmPassword: str({ description: "Повтор пароля; должен совпадать с `password`" }),
       displayName: str({ minLength: 1, maxLength: 50 }),
+      turnstileToken: str({ description: "Токен виджета Cloudflare Turnstile; обязателен, если капча включена (см. `/config`)" }),
     },
     ["email", "password", "confirmPassword", "displayName"]
   ),
@@ -736,6 +737,7 @@ const schemas = {
       main: arr(str()),
       tags: { type: "array", maxItems: 10, items: str({ maxLength: 40 }) },
       image: nullableStr({ description: "URL фото, загруженного через /uploads/image" }),
+      turnstileToken: str({ description: "Токен Cloudflare Turnstile; нужен только в POST и только если капча включена" }),
       time: nullableStr(),
       servings: nullableStr(),
       ingredients: { type: "array", minItems: 1, maxItems: 100, items: obj({ kind: itemKind, name: str(), amount: nullableStr() }, ["name"]) },

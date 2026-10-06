@@ -290,7 +290,7 @@ test("cleanup: удаляет неподтверждённых USER старше
   const mk = (n, data) => prisma.user.create({ data: { email: mail(n), passwordHash: "x", displayName: n, ...data } });
   await mk("c-old", { createdAt: new Date(Date.now() - 8 * day) });
   await mk("c-new", { createdAt: new Date(Date.now() - 6 * day) });
-  await mk("c-ver", { createdAt: new Date(Date.now() - 30 * day), emailVerifiedAt: new Date() });
+  await mk("c-ver", { createdAt: new Date(Date.now() - 30 * day), emailVerifiedAt: new Date(), lastActiveAt: new Date() });
   await mk("c-adm", { createdAt: new Date(Date.now() - 30 * day), role: "ADMIN" });
   const old = await userOf(mail("c-old"));
   await prisma.emailToken.create({ data: { userId: old.id, type: "VERIFY", tokenHash: `h-${T}-1`, expiresAt: new Date(Date.now() + day) } });

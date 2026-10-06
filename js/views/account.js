@@ -3,7 +3,8 @@
 import { WAKE_HINT_AFTER } from "../config.js";
 import { els } from "./ui.js";
 import { getUser, getSync, isAdmin } from "../core/store.js";
-import { mailEnabled } from "../core/serverConfig.js";
+import { mailEnabled, turnstileKey } from "../core/serverConfig.js";
+import { mountTurnstile } from "../lib/turnstile.js";
 import * as sync from "../sync/sync.js";
 import * as endpoints from "../api/endpoints.js";
 import { ApiError, NetworkError } from "../api/client.js";
@@ -11,6 +12,7 @@ import { esc, plural, toast } from "../lib/utils.js";
 import { suggestEmail, isAsciiEmail } from "../lib/emailTypos.js";
 
 let mode = "login"; // login | register | forgot
+let captcha = null; // виджет Turnstile формы регистрации (если капча включена на сервере)
 let flash = "";     // одноразовое сообщение над формой (например, «пароль изменён»)
 
 // Кнопка в шапке: 👤 для гостя, первая буква имени для вошедшего; точка — есть неотправленные изменения
@@ -77,6 +79,7 @@ export function renderAccount() {
             autocomplete="${reg ? "new-password" : "current-password"}" required></label>
         ${reg ? `<label class="field">Повторите пароль
           <input name="confirmPassword" type="password" class="ct-input" maxlength="72" autocomplete="new-password" required></label>` : ""}
+        ${reg && turnstileKey() ? `<div id="captchaBox" class="captcha-box"></div>` : ""}
         <div id="authMsg" class="form-msg" hidden></div>
         <button class="tool-btn accent" id="authSubmit" type="submit">${reg ? "Зарегистрироваться" : "Войти"}</button>
         ${!reg && mailEnabled() ? `<button class="link-btn" type="button" id="toForgot">Забыли пароль?</button>` : ""}
@@ -91,6 +94,12 @@ export function renderAccount() {
   if (forgot) forgot.addEventListener("click", () => { mode = "forgot"; renderAccount(); });
   document.getElementById("authForm").addEventListener("submit", onSubmit);
   if (reg) setupEmailHint(document.getElementById("authForm").email);
+  if (captcha) { captcha.remove(); captcha = null; }
+  const box = document.getElementById("captchaBox");
+  if (box) {
+    captcha = mountTurnstile(box, turnstileKey());
+    captcha.ready.catch((err) => showMsg(err.message, "err"));
+  }
 }
 
 // Регистрация: после ввода адреса предлагаем исправить очевидную опечатку в домене («gmial.com → gmail.com?»)
@@ -175,6 +184,7 @@ async function onSubmit(e) {
   if (mode === "register" && !isAsciiEmail(email)) return showMsg("E-mail — только латинские буквы, цифры и обычные символы (без кириллицы и пробелов)", "err");
   if (mode === "register" && password.length < 8) return showMsg("Пароль — не меньше 8 символов", "err");
   if (mode === "register" && password !== confirm) return showMsg("Пароли не совпадают", "err");
+  if (mode === "register" && captcha && !captcha.token()) return showMsg("Подтвердите, что вы не робот", "err");
 
   const btn = document.getElementById("authSubmit");
   btn.disabled = true;
@@ -182,7 +192,7 @@ async function onSubmit(e) {
   const hint = setTimeout(() => showMsg("Сервер просыпается — это может занять до минуты…", "info"), WAKE_HINT_AFTER);
   try {
     if (mode === "register") {
-      const { verificationSent } = await sync.register(email, password, confirm, name);
+      const { verificationSent } = await sync.register(email, password, confirm, name, captcha ? captcha.token() : "");
       toast(verificationSent ? "Вы вошли ✅ Проверьте почту — отправили письмо для подтверждения" : "Вы вошли ✅");
     } else {
       await sync.login(email, password);
@@ -192,6 +202,7 @@ async function onSubmit(e) {
   } catch (err) {
     btn.disabled = false;
     showMsg(errText(err), "err");
+    if (captcha) captcha.reset(); // токен одноразовый — после любой неудачи нужен новый
   } finally {
     clearTimeout(hint);
   }

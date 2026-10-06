@@ -773,6 +773,7 @@ body.detail-open .site-header {
 fieldset.field { border: none; padding: 0; margin: 0; }
 fieldset.field legend { padding: 0; margin-bottom: 6px; }
 .field-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; }
+.captcha-box { display: flex; justify-content: center; min-height: 0; }
 .form-msg { padding: 10px 14px; border-radius: 12px; font-weight: 700; font-size: .9rem; background: var(--accent-soft); }
 .form-msg[hidden] { display: none; }
 .form-msg.err { background: #fde3e0; color: #a3271b; }

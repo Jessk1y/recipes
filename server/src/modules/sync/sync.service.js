@@ -2,6 +2,7 @@ const prisma = require("../../lib/prisma");
 const me = require("../me/me.service");
 const shopping = require("../shopping/shopping.service");
 const { findPublished } = require("../../lib/recipeRef");
+const { touchActive } = require("../../lib/activity");
 
 // Применяет одну операцию. Возвращает null (применена) или код причины пропуска.
 async function applyOp(userId, op, tx) {
@@ -51,6 +52,7 @@ async function applyOp(userId, op, tx) {
 // Ограничение: удаления не хранятся как «надгробия», поэтому запоздавшая старая note.set
 // после note.remove с другого устройства восстановит заметку.
 async function sync(userId, ops) {
+  await touchActive(userId);
   const now = new Date();
   const ordered = ops
     .map((op, index) => ({ op: { ...op, at: op.at > now ? now : op.at }, index }))

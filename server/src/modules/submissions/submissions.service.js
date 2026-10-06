@@ -7,6 +7,8 @@ const { AppError } = require("../../lib/errors");
 const { slugify } = require("../../lib/slug");
 const recipes = require("../recipes/recipes.service");
 const push = require("../../lib/push");
+const batch = require("../../lib/submissionBatch");
+const { touchActive } = require("../../lib/activity");
 
 const DAY = 24 * 60 * 60 * 1000;
 const EDITABLE = ["PENDING", "REJECTED"];
@@ -18,16 +20,12 @@ const view = (r) => ({
   reviewedAt: r.reviewedAt,
 });
 
-// Пуш всем админам с подпиской: в очереди появилась новая отправка (в фоне — автор не ждёт push-сервисы)
+// Пуш админам с подпиской: в очереди появилась новая отправка. Не чаще раза в 10 минут — остальные склеиваются
+// в «N новых предложений» (lib/submissionBatch.js). В фоне: автор не ждёт ни push-сервисы, ни автора из БД.
 function announce(userId, r, resubmitted) {
   push.background(async () => {
     const author = await prisma.user.findUnique({ where: { id: userId }, select: { displayName: true } });
-    await push.notifyAdmins({
-      title: resubmitted ? "Исправленное предложение рецепта" : "Новое предложение рецепта",
-      body: `«${r.title}»${author ? ` — ${author.displayName}` : ""}`,
-      hash: "#/admin/submissions",
-      tag: `submission-${r.id}`,
-    });
+    await batch.add({ id: r.id, title: r.title, author: author && author.displayName, resubmitted });
   });
 }
 
@@ -85,6 +83,7 @@ async function create(userId, input) {
     data: { submittedAt: new Date(), rejectReason: null },
   });
   const r = await getMine(userId, out.id);
+  await touchActive(userId);
   announce(userId, r, false);
   return r;
 }
@@ -109,6 +108,7 @@ async function update(userId, id, input) {
     data,
   });
   const r = await getMine(userId, out.id);
+  await touchActive(userId);
   if (data.submittedAt) announce(userId, r, true); // правка отклонённого = новая отправка на модерацию; правка ожидающего — тишина
   return r;
 }

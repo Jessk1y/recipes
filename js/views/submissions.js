@@ -3,7 +3,7 @@
 import { WAKE_HINT_AFTER } from "../config.js";
 import { els } from "./ui.js";
 import { getUser } from "../core/store.js";
-import { mailEnabled } from "../core/serverConfig.js";
+import { mailEnabled, turnstileKey } from "../core/serverConfig.js";
 import * as endpoints from "../api/endpoints.js";
 import { NetworkError, imageUrl } from "../api/client.js";
 import { esc, toast, emojiFor } from "../lib/utils.js";
@@ -130,6 +130,7 @@ async function renderForm(id, seq) {
   const rejected = recipe && recipe.status === "REJECTED";
   mountRecipeForm(view(), {
     mode: "user", recipe, cats,
+    captchaKey: recipe ? null : turnstileKey(), // капча — только для новой отправки (правка уже созданного — без неё)
     title: recipe ? "✏️ " + recipe.title : "＋ Предложить рецепт",
     notice: rejected
       ? `<div class="form-msg err">Отклонено: ${esc(recipe.rejectReason || "без пояснения")}. После исправления рецепт снова уйдёт на проверку.</div>`

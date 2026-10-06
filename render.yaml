@@ -42,3 +42,9 @@ services:
         sync: false
       - key: VAPID_PRIVATE_KEY
         sync: false
+      # капча Cloudflare Turnstile (регистрация и отправка предложения); необязательны: без них капча выключена.
+      # Нужны оба сразу: секретный — только здесь, публичный отдаётся фронтенду через GET /config
+      - key: TURNSTILE_SECRET_KEY
+        sync: false
+      - key: TURNSTILE_SITE_KEY
+        sync: false

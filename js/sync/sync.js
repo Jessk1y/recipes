@@ -163,8 +163,8 @@ export async function login(email, password) {
   await startSession(await endpoints.login(email, password));
 }
 // Возвращает { verificationSent }: ушло ли письмо с подтверждением e-mail
-export async function register(email, password, confirmPassword, displayName) {
-  const r = await endpoints.register(email, password, confirmPassword, displayName);
+export async function register(email, password, confirmPassword, displayName, turnstileToken) {
+  const r = await endpoints.register(email, password, confirmPassword, displayName, turnstileToken);
   await startSession(r);
   return { verificationSent: r.verificationSent !== false };
 }

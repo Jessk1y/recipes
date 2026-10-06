@@ -8,6 +8,7 @@ import * as endpoints from "../api/endpoints.js";
 import { ApiError, NetworkError, imageUrl } from "../api/client.js";
 import { esc } from "../lib/utils.js";
 import { getCatalog } from "../core/store.js";
+import { mountTurnstile } from "../lib/turnstile.js";
 import { productNames } from "../lib/products.js";
 import { UNITS, ingredientRows, ingredientsOut, stepRows, stepsOut, hasTime } from "../lib/recipeFields.js";
 
@@ -42,6 +43,7 @@ const TXT = 'spellcheck="true" lang="ru" autocapitalize="sentences"';
  * @param o.onSaved (saved) — что делать после успеха
  * @param o.notice  html-плашка над формой (например, «Предложил: …»)
  * @param o.saveLabel подпись кнопки сохранения
+ * @param o.captchaKey публичный ключ Turnstile — если задан, перед отправкой нужно пройти «я не робот» (новое предложение)
  */
 export function mountRecipeForm(host, o) {
   const mode = o.mode;
@@ -120,6 +122,7 @@ export function mountRecipeForm(host, o) {
       </div>
 
       ${statusRow}
+      ${o.captchaKey ? `<div id="captchaBox" class="captcha-box"></div>` : ""}
       <div class="detail-actions">
         <button class="tool-btn accent" type="submit" id="saveBtn">${esc(o.saveLabel || "💾 Сохранить")}</button>
         <button class="tool-btn" type="button" id="cancelBtn">Отмена</button>
@@ -127,6 +130,12 @@ export function mountRecipeForm(host, o) {
     </form>`;
 
   const form = document.getElementById("recipeForm");
+  let captcha = null;
+  const captchaBox = document.getElementById("captchaBox");
+  if (captchaBox) {
+    captcha = mountTurnstile(captchaBox, o.captchaKey);
+    captcha.ready.catch((err) => msg(err.message, "err"));
+  }
   const preview = document.getElementById("photoPreview");
   const msg = (text, kind) => {
     const m = document.getElementById("formMsg");
@@ -251,6 +260,10 @@ export function mountRecipeForm(host, o) {
     if (!input.ingredients.some((i) => i.kind === "ITEM")) errs.push("Нужен хотя бы один ингредиент");
     if (!input.steps.some((s) => s.kind === "ITEM")) errs.push("Нужен хотя бы один шаг");
     if (errs.length) { msg(errs.join(" · "), "err"); return; }
+    if (captcha) {
+      if (!captcha.token()) { msg("Подтвердите, что вы не робот", "err"); return; }
+      input.turnstileToken = captcha.token();
+    }
 
     const btn = document.getElementById("saveBtn");
     btn.disabled = true;
@@ -259,6 +272,7 @@ export function mountRecipeForm(host, o) {
       o.onSaved(await o.save(input));
     } catch (err) {
       btn.disabled = false;
+      if (captcha) captcha.reset(); // токен одноразовый — после любой неудачи нужен новый
       if (err instanceof ApiError && err.details && err.details.length) {
         msg(err.details.map((d) => `${FIELD_NAMES[d.field.split(".")[0]] || d.field}: ${d.message}`).join(" · "), "err");
       } else {

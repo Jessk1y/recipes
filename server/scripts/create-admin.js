@@ -3,6 +3,7 @@
 require("dotenv").config();
 const bcrypt = require("bcrypt");
 const { PrismaClient } = require("@prisma/client");
+const { emailKey } = require("../src/lib/emailKey");
 
 const prisma = new PrismaClient();
 
@@ -21,7 +22,7 @@ async function main() {
   const user = await prisma.user.upsert({
     where: { email },
     update: { role: "ADMIN", passwordHash, isBlocked: false },
-    create: { email, passwordHash, displayName, role: "ADMIN" },
+    create: { email, emailKey: emailKey(email), passwordHash, displayName, role: "ADMIN" },
   });
   console.log(`Администратор: ${user.email} (${user.id})`);
 }

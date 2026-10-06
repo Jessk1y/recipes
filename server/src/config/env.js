@@ -25,6 +25,12 @@ const schema = z.object({
   VAPID_PRIVATE_KEY: z.string().optional(),
   // контакт издателя для push-сервисов: mailto: или https-адрес; по умолчанию — адрес сайта
   VAPID_SUBJECT: z.string().optional(),
+  // Cloudflare Turnstile (капча на регистрации и отправке предложения). Нужны оба ключа; без них проверка выключена.
+  // Секретный — только на сервере; публичный отдаётся фронтенду через GET /config
+  TURNSTILE_SECRET_KEY: z.string().optional(),
+  TURNSTILE_SITE_KEY: z.string().optional(),
+  // предохранитель: больше стольких регистраций в час на весь сайт — временно 429 и пуш админу
+  REGISTRATIONS_PER_HOUR: z.coerce.number().int().min(1).default(100),
   MAIL_DRIVER: z.enum(["brevo", "mailjet", "log", "memory", "off"]).optional(),
 });
 
@@ -88,6 +94,12 @@ if (vapidPub) {
   }
 }
 
+// Turnstile: половинчатая настройка — ошибка (иначе капча молча осталась бы выключенной). В тестах включается вручную.
+if (Boolean(parsed.data.TURNSTILE_SECRET_KEY) !== Boolean(parsed.data.TURNSTILE_SITE_KEY)) {
+  console.error("Ошибка конфигурации: TURNSTILE_SECRET_KEY и TURNSTILE_SITE_KEY задаются только вместе");
+  process.exit(1);
+}
+
 module.exports = {
   ...parsed.data,
   corsOrigins: parsed.data.CORS_ORIGINS.split(",").map((s) => s.trim()).filter(Boolean),
@@ -96,6 +108,8 @@ module.exports = {
   mailEnabled: mailDriver !== "off",
   pushEnabled: parsed.data.NODE_ENV !== "test" && Boolean(vapidPub), // тесты включают сами: ключи из .env им не нужны
   vapidSubject,
+  // изменяемое поле: тесты включают капчу на настоящем app
+  turnstileEnabled: parsed.data.NODE_ENV !== "test" && Boolean(parsed.data.TURNSTILE_SECRET_KEY),
   frontendUrl: parsed.data.FRONTEND_URL.replace(/\/+$/, ""),
   isProd: parsed.data.NODE_ENV === "production",
 };

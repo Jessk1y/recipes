@@ -10,6 +10,11 @@ router.get("/tags", async (req, res) =>
 );
 
 // публичные настройки для фронтенда: без почты он прячет «Забыли пароль?» и подсказки про подтверждение e-mail
-router.get("/config", (req, res) => res.json({ mailEnabled: env.mailEnabled, submissionsPerDay: env.SUBMISSIONS_PER_DAY }));
+router.get("/config", (req, res) => res.json({
+    mailEnabled: env.mailEnabled,
+    submissionsPerDay: env.SUBMISSIONS_PER_DAY,
+    // публичный ключ виджета Turnstile; null — капча выключена
+    turnstileSiteKey: env.turnstileEnabled ? env.TURNSTILE_SITE_KEY : null,
+  }));
 
 module.exports = router;

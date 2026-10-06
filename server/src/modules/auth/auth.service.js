@@ -6,6 +6,9 @@ const env = require("../../config/env");
 const emailAuth = require("./emailAuth.service");
 const emailCheck = require("../../lib/emailCheck");
 const { suggestDomain } = require("../../lib/emailTypos");
+const { emailKey } = require("../../lib/emailKey");
+const { assertRegistrationOpen } = require("../../lib/regFuse");
+const { touchActive } = require("../../lib/activity");
 const { signAccessToken, newRefreshToken, hashToken, REFRESH_TTL_MS } = require("../../lib/jwt");
 
 const BCRYPT_COST = 12;
@@ -52,14 +55,17 @@ async function assertDeliverable(email) {
 }
 
 async function register({ email, password, displayName }) {
-  if (await prisma.user.findUnique({ where: { email } })) throw emailTaken();
+  await assertRegistrationOpen();
+  // уникальность по каноническому адресу: a.b+x@gmail.com и ab@gmail.com — один ящик (старые дубли в БД не трогаем)
+  const key = emailKey(email);
+  if (await prisma.user.findFirst({ where: { OR: [{ email }, { emailKey: key }] }, select: { id: true } })) throw emailTaken();
   await assertDeliverable(email);
   const passwordHash = await bcrypt.hash(password, BCRYPT_COST);
   let user;
   try {
     // почта отключена → подтверждать нечем: сразу подтверждён (и останется таким, когда почта включится)
     user = await prisma.user.create({
-      data: { email, passwordHash, displayName, emailVerifiedAt: env.mailEnabled ? null : new Date() },
+      data: { email, emailKey: key, passwordHash, displayName, emailVerifiedAt: env.mailEnabled ? null : new Date() },
     });
   } catch (e) {
     if (e.code === "P2002") throw emailTaken();
@@ -75,6 +81,7 @@ async function login({ email, password }) {
   const ok = await bcrypt.compare(password, user ? user.passwordHash : DUMMY_HASH);
   if (!user || !ok) throw new AppError(401, "INVALID_CREDENTIALS", "Неверный e-mail или пароль");
   if (user.isBlocked) throw new AppError(403, "ACCOUNT_BLOCKED", "Аккаунт заблокирован");
+  await touchActive(user.id);
   return startSession(user);
 }
 

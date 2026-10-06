@@ -4,6 +4,7 @@ const { Router } = require("express");
 const validate = require("../../middleware/validate");
 const { requireAuth, requireVerifiedEmail } = require("../../middleware/auth");
 const schemas = require("./submissions.schemas");
+const { requireCaptcha } = require("../../lib/turnstile");
 const c = require("./submissions.controller");
 
 const router = Router();
@@ -11,7 +12,7 @@ router.use(requireAuth);
 
 router.get("/", c.listMine);
 router.get("/:id", c.getMine);
-router.post("/", requireVerifiedEmail, validate(schemas.submissionInput), c.create);
+router.post("/", requireVerifiedEmail, requireCaptcha, validate(schemas.submissionInput), c.create);
 router.put("/:id", requireVerifiedEmail, validate(schemas.submissionInput), c.update);
 
 module.exports = router;

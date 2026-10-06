@@ -3,6 +3,7 @@ const limiters = require("../../middleware/rateLimits");
 const validate = require("../../middleware/validate");
 const { requireAuth } = require("../../middleware/auth");
 const schemas = require("./auth.schemas");
+const { requireCaptcha } = require("../../lib/turnstile");
 const c = require("./auth.controller");
 
 const router = Router();
@@ -10,7 +11,7 @@ const router = Router();
 // ограничение частоты запросов к /auth (защита от перебора паролей); письма — строже
 router.use(limiters.auth);
 
-router.post("/register", validate(schemas.register), c.register);
+router.post("/register", requireCaptcha, validate(schemas.register), c.register);
 router.post("/login", validate(schemas.login), c.login);
 router.post("/refresh", validate(schemas.refresh), c.refresh);
 router.post("/logout", requireAuth, validate(schemas.logout), c.logout);
