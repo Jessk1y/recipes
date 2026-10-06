@@ -7,27 +7,29 @@ import { MAIN_TAGS } from "../config.js";
 import * as endpoints from "../api/endpoints.js";
 import { ApiError, NetworkError, imageUrl } from "../api/client.js";
 import { esc } from "../lib/utils.js";
+import { getCatalog } from "../core/store.js";
+import { productNames } from "../lib/products.js";
+import { UNITS, ingredientRows, ingredientsOut, stepRows, stepsOut, hasTime } from "../lib/recipeFields.js";
 
 const FIELD_NAMES = {
   title: "Название", slug: "Адрес (slug)", category: "Категория", main: "Основные теги", tags: "Теги",
   image: "Фото", time: "Время", servings: "Порции", ingredients: "Ингредиенты", steps: "Шаги", status: "Статус",
 };
 
-// Ингредиенты и шаги — по строке на пункт; строка «# Текст» — подзаголовок. Ингредиент: «Мука — 200 г».
-const toLines = (arr, key) => arr.map((x) => (x.kind === "HEADER" ? "# " + x[key] : key === "name" && x.amount ? `${x.name} — ${x.amount}` : x[key])).join("\n");
+// Подсказки продуктов: словарь корзины + названия ингредиентов из каталога
+function productSuggestions() {
+  const names = new Set(productNames());
+  for (const rec of getCatalog().recipes) {
+    for (const i of rec.ingredients) {
+      if (typeof i !== "string") continue;
+      const n = i.split(" — ")[0].trim();
+      if (n) names.add(n);
+    }
+  }
+  return [...names].sort((x, y) => x.localeCompare(y, "ru"));
+}
 
-function parseLines(text) {
-  return text.split("\n").map((l) => l.trim()).filter(Boolean).map((l) =>
-    l.startsWith("#") ? { kind: "HEADER", value: l.replace(/^#+\s*/, "") } : { kind: "ITEM", value: l });
-}
-function parseIngredients(text) {
-  return parseLines(text).map(({ kind, value }) => {
-    if (kind === "HEADER") return { kind, name: value };
-    const m = value.match(/^(.+?)\s*—\s*(.*)$/) || value.match(/^(.+?)\s+[–-]\s+(.*)$/);
-    return m ? { kind, name: m[1].trim(), amount: m[2].trim() || null } : { kind, name: value, amount: null };
-  });
-}
-const parseSteps = (text) => parseLines(text).map(({ kind, value }) => ({ kind, text: value }));
+const TXT = 'spellcheck="true" lang="ru" autocapitalize="sentences"';
 
 /**
  * @param host      элемент, в который рисуем форму
@@ -80,16 +82,16 @@ export function mountRecipeForm(host, o) {
     ${o.notice || ""}
     <form id="recipeForm" class="form admin-form" novalidate>
       <div id="formMsg" class="form-msg" hidden></div>
-      <label class="field">Название *<input name="title" class="ct-input" maxlength="200" value="${esc(r.title)}" required></label>
+      <label class="field">Название *<input name="title" class="ct-input" ${TXT} maxlength="200" value="${esc(r.title)}" required></label>
       <div class="field-row">
         ${categoryField}
         <label class="field">Время<input name="time" class="ct-input" maxlength="50" placeholder="40 мин, 1 ч 10 мин" value="${esc(r.time || "")}"></label>
-        <label class="field">Порции<input name="servings" class="ct-input" maxlength="100" placeholder="4 порции" value="${esc(r.servings || "")}"></label>
+        <label class="field">Порции<input name="servings" class="ct-input" ${TXT} maxlength="100" placeholder="4 порции" value="${esc(r.servings || "")}"></label>
       </div>
       <fieldset class="field"><legend>Основные теги * <span class="hint">(фильтр на главной)</span></legend>
         <div class="main-tags">${MAIN_TAGS.map((t) => `<label class="tag-check"><input type="checkbox" name="main" value="${esc(t)}"${r.main.includes(t) ? " checked" : ""}> ${esc(t)}</label>`).join("")}</div>
       </fieldset>
-      <label class="field">Теги для поиска <span class="hint">(через запятую${mode === "user" ? ", не больше 10" : ""})</span><input name="tags" class="ct-input" value="${esc(r.tags.join(", "))}"></label>
+      <label class="field">Теги для поиска <span class="hint">(через запятую${mode === "user" ? ", не больше 10" : ""})</span><input name="tags" class="ct-input" ${TXT} value="${esc(r.tags.join(", "))}"></label>
 
       <div class="field">Фото <span class="hint">(jpeg, png или webp, до 5 МБ)</span>
         <div class="photo-box">
@@ -101,10 +103,21 @@ export function mountRecipeForm(host, o) {
         </div>
       </div>
 
-      <label class="field">Ингредиенты * <span class="hint">— по строке: «Мука — 200 г»; «# Для соуса» — подзаголовок</span>
-        <textarea name="ingredients" class="note-area admin-area" rows="10">${esc(toLines(r.ingredients, "name"))}</textarea></label>
-      <label class="field">Шаги * <span class="hint">— по строке на шаг; «# Тесто» — подзаголовок; время в тексте («15 мин») даёт таймер</span>
-        <textarea name="steps" class="note-area admin-area" rows="10">${esc(toLines(r.steps, "text"))}</textarea></label>
+      <div class="field">Ингредиенты *
+        <div id="ingList" class="rows"></div>
+        <div class="rows-add">
+          <button type="button" class="tool-btn" id="ingAdd">＋ Ингредиент</button>
+          <button type="button" class="tool-btn" id="ingAddH">＋ Подзаголовок</button>
+        </div>
+        <datalist id="productList">${productSuggestions().map((n) => `<option value="${esc(n)}">`).join("")}</datalist>
+      </div>
+      <div class="field">Шаги * <span class="hint">— время в тексте («15 мин») даёт таймер</span>
+        <div id="stepList" class="rows"></div>
+        <div class="rows-add">
+          <button type="button" class="tool-btn" id="stepAdd">＋ Шаг</button>
+          <button type="button" class="tool-btn" id="stepAddH">＋ Подзаголовок</button>
+        </div>
+      </div>
 
       ${statusRow}
       <div class="detail-actions">
@@ -145,6 +158,73 @@ export function mountRecipeForm(host, o) {
     drawPhoto();
   });
 
+  // ---------- Редакторы ингредиентов и шагов ----------
+  const ing = ingredientRows(r.ingredients);
+  const steps = stepRows(r.steps);
+  const unitOptions = (unit) => {
+    const list = unit && !UNITS.includes(unit) ? [...UNITS, unit] : UNITS;
+    return `<option value=""${unit ? "" : " selected"}>—</option>` +
+      list.map((u) => `<option value="${esc(u)}"${u === unit ? " selected" : ""}>${esc(u)}</option>`).join("");
+  };
+  const ctrls = (i, n) => `<div class="row-ctrls">
+      <button type="button" class="row-btn" data-act="up" aria-label="Выше"${i === 0 ? " disabled" : ""}>↑</button>
+      <button type="button" class="row-btn" data-act="down" aria-label="Ниже"${i === n - 1 ? " disabled" : ""}>↓</button>
+      <button type="button" class="row-btn del" data-act="del" aria-label="Удалить">✕</button></div>`;
+  const drawIng = () => {
+    document.getElementById("ingList").innerHTML = ing.map((x, i) => x.h
+      ? `<div class="row row-h" data-i="${i}"><input class="ct-input" data-f="name" ${TXT} maxlength="200" placeholder="Подзаголовок, например «Для соуса»" value="${esc(x.name)}">${ctrls(i, ing.length)}</div>`
+      : `<div class="row row-ing" data-i="${i}">
+          <input class="ct-input ing-name" data-f="name" list="productList" ${TXT} maxlength="200" placeholder="Продукт" value="${esc(x.name)}">
+          <input class="ct-input ing-qty" data-f="qty" inputmode="decimal" maxlength="20" placeholder="Кол-во" value="${esc(x.qty)}">
+          <select class="ct-input ing-unit" data-f="unit" aria-label="Единица">${unitOptions(x.unit)}</select>
+          ${ctrls(i, ing.length)}</div>`).join("");
+  };
+  const drawSteps = () => {
+    let n = 0;
+    document.getElementById("stepList").innerHTML = steps.map((x, i) => x.h
+      ? `<div class="row row-h" data-i="${i}"><input class="ct-input" data-f="text" ${TXT} maxlength="2000" placeholder="Подзаголовок, например «Крем»" value="${esc(x.text)}">${ctrls(i, steps.length)}</div>`
+      : `<div class="row row-step" data-i="${i}">
+          <div class="step-head"><span class="step-num">Шаг ${++n}</span><span class="step-time" ${hasTime(x.text) ? "" : "hidden"}>⏱ таймер</span>${ctrls(i, steps.length)}</div>
+          <textarea class="ct-input" data-f="text" ${TXT} rows="3" maxlength="2000" placeholder="Что сделать">${esc(x.text)}</textarea></div>`).join("");
+  };
+  const editor = (id, arr, draw) => {
+    const box = document.getElementById(id);
+    box.addEventListener("input", (e) => {
+      const row = e.target.closest(".row");
+      if (!row || !e.target.dataset.f) return;
+      arr[+row.dataset.i][e.target.dataset.f] = e.target.value;
+      if (e.target.tagName === "TEXTAREA") row.querySelector(".step-time").hidden = !hasTime(e.target.value);
+    });
+    box.addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-act]");
+      if (!btn) return;
+      const i = +btn.closest(".row").dataset.i;
+      const act = btn.dataset.act;
+      if (act === "del") arr.splice(i, 1);
+      else { const j = act === "up" ? i - 1 : i + 1; if (j < 0 || j >= arr.length) return; [arr[i], arr[j]] = [arr[j], arr[i]]; }
+      draw();
+    });
+  };
+  const addRow = (arr, draw, id, row) => {
+    arr.push(row);
+    draw();
+    const el = document.getElementById(id).lastElementChild.querySelector("input,textarea");
+    el.focus();
+    el.scrollIntoView({ block: "center", behavior: "smooth" });
+  };
+  const newIng = () => ({ h: false, name: "", qty: "", unit: "", orig: null, origQty: "", origUnit: "" });
+  const newStep = () => ({ h: false, text: "", timerSeconds: null, origText: "" });
+  if (!ing.length) ing.push(newIng());
+  if (!steps.length) steps.push(newStep());
+  drawIng();
+  drawSteps();
+  editor("ingList", ing, drawIng);
+  editor("stepList", steps, drawSteps);
+  document.getElementById("ingAdd").addEventListener("click", () => addRow(ing, drawIng, "ingList", newIng()));
+  document.getElementById("ingAddH").addEventListener("click", () => addRow(ing, drawIng, "ingList", { h: true, name: "" }));
+  document.getElementById("stepAdd").addEventListener("click", () => addRow(steps, drawSteps, "stepList", newStep()));
+  document.getElementById("stepAddH").addEventListener("click", () => addRow(steps, drawSteps, "stepList", { h: true, text: "" }));
+
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
     const input = {
@@ -155,8 +235,8 @@ export function mountRecipeForm(host, o) {
       image,
       time: form.time.value.trim() || null,
       servings: form.servings.value.trim() || null,
-      ingredients: parseIngredients(form.ingredients.value),
-      steps: parseSteps(form.steps.value),
+      ingredients: ingredientsOut(ing),
+      steps: stepsOut(steps),
     };
     if (mode === "admin") input.status = form.status.value;
     if (mode === "moderate") input.status = "PUBLISHED";

@@ -885,3 +885,29 @@ a.act-btn { text-decoration: none; display: inline-flex; align-items: center; }
 .push-box .push-note.err { color: #a3271b; }
 :root[data-theme="dark"] .push-box .push-note.err { color: #ffb4a8; }
 .push-box .tool-btn:disabled { opacity: .55; cursor: default; }
+
+/* Редактор рецепта: строки ингредиентов и шагов */
+.rows { display: flex; flex-direction: column; gap: 8px; }
+.rows-add { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.row { display: flex; gap: 6px; align-items: center; }
+.row-ing .ing-name { flex: 1 1 auto; min-width: 0; }
+.row-ing .ing-qty { flex: 0 0 4.5em; width: 4.5em; min-width: 0; }
+.row-ing .ing-unit { flex: 0 0 7em; width: 7em; min-width: 0; padding-left: 8px; padding-right: 4px; }
+.row-h { background: var(--accent-soft); border-radius: 12px; padding: 6px; }
+.row-h .ct-input { flex: 1; min-width: 0; font-weight: 800; }
+.row-step { flex-direction: column; align-items: stretch; gap: 6px; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 8px 10px; }
+.row-step textarea { resize: vertical; width: 100%; font-weight: 400; }
+.step-head { display: flex; align-items: center; gap: 8px; }
+.step-num { font-weight: 800; color: var(--accent); }
+.step-time { font-size: .78rem; font-weight: 800; padding: 2px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); }
+.step-time[hidden] { display: none; }
+.row-ctrls { display: flex; gap: 4px; margin-left: auto; flex: none; }
+.row-btn { width: 36px; height: 36px; border: 1px solid var(--line); background: var(--card); color: var(--ink); border-radius: 10px; font: inherit; font-weight: 800; cursor: pointer; }
+.row-btn:disabled { opacity: .35; cursor: default; }
+.row-btn.del:hover { border-color: #c0392b; color: #c0392b; }
+@media (max-width: 480px) {
+  .row-ing { flex-wrap: wrap; }
+  .row-ing .ing-name { flex: 1 1 100%; }
+  .row-ing .ing-qty { flex: 1 1 4em; }
+  .row-ing .ing-unit { flex: 1 1 6em; }
+}

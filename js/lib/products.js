@@ -77,3 +77,6 @@ export function productInfo(name) {
   return { key: plain || withParens || String(name).trim().toLowerCase(), density: 0, pref: "g" };
 }
 export const canonKey = (name) => productInfo(name).key;
+
+// Названия для подсказок в редакторе рецептов (основные + синонимы словаря)
+export const productNames = () => [...new Set(PRODUCTS.flatMap((p) => [p.name, ...p.alias]))];
