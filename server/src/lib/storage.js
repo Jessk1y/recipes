@@ -65,11 +65,20 @@ const cloud = {
   },
 };
 
+// наш ли это URL (загружен через этот API): только такие картинки принимаем в предложениях пользователей
+const isOwn = (url) => {
+  const u = String(url || "");
+  if (driverName() !== "cloudinary") return /^https?:\/\/[^/]+\/uploads\/[0-9a-f-]{36}\.(?:jpg|png|webp)$/i.test(u);
+  const m = /^https:\/\/res\.cloudinary\.com\/([^/]+)\/image\/upload\/(?:v\d+\/)?recipes\/[0-9a-f-]{36}\.[a-z]+$/i.exec(u);
+  return !!m && m[1] === sdk().config().cloud_name;
+};
+
 const driver = () => (driverName() === "cloudinary" ? cloud : local);
 
 module.exports = {
   driverName,
   save: (...args) => driver().save(...args),
   remove: (url) => driver().remove(url),
+  isOwn,
   UPLOAD_DIR,
 };

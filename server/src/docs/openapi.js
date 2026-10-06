@@ -131,6 +131,7 @@ const paths = {
       security: auth,
       responses: {
         202: ok("Письмо отправлено", obj({ ok: bool })),
+        503: err("Почта отключена (`MAIL_DISABLED`): в production нет ключей Brevo/Mailjet — временно недоступно"),
         401: E[401],
         403: E[403],
         409: err("E-mail уже подтверждён (`ALREADY_VERIFIED`)"),
@@ -146,7 +147,7 @@ const paths = {
       description:
         "Ответ всегда одинаковый (202), независимо от того, зарегистрирован ли e-mail, — адреса перебирать нельзя. Ссылка одноразовая, действует 1 час; действует только последняя запрошенная. Не чаще раза в минуту и 5 раз в час на пользователя (лишние запросы молча игнорируются); не больше 10 запросов в час с одного IP.",
       requestBody: body(obj({ email: str({ format: "email" }) }, ["email"])),
-      responses: { 202: ok("Если такой e-mail есть, письмо отправлено", obj({ ok: bool })), 422: E[422], 429: E[429] },
+      responses: { 202: ok("Если такой e-mail есть, письмо отправлено", obj({ ok: bool })), 422: E[422], 429: E[429], 503: err("Почта отключена (`MAIL_DISABLED`): в production нет ключей Brevo/Mailjet — временно недоступно"), },
     },
   },
   "/auth/reset-password": {
@@ -259,6 +260,14 @@ const paths = {
       responses: { 200: ok("Категории со счётчиком опубликованных рецептов", arr(ref("Category"))) },
     },
   },
+  "/config": {
+    get: {
+      tags: ["Справочники"],
+      summary: "Публичные настройки сервера",
+      description: "`mailEnabled: false` — почта отключена: e-mail не подтверждается (все считаются подтверждёнными), «забыли пароль» и повторная отправка письма отвечают 503 `MAIL_DISABLED`. Фронтенд по этому флагу прячет соответствующие элементы.",
+      responses: { 200: ok("Настройки", obj({ mailEnabled: bool, submissionsPerDay: int })) },
+    },
+  },
   "/tags": {
     get: {
       tags: ["Справочники"],
@@ -271,10 +280,10 @@ const paths = {
   "/uploads/image": {
     post: {
       tags: ["Загрузки"],
-      ...adminOnly(
-        "Загрузить фото",
-        "jpeg/png/webp до 5 МБ; тип определяется по сигнатуре файла. Сейчас хранилище — локальная заглушка, перед деплоем заменяется на Cloudinary."
-      ),
+      summary: "Загрузить фото",
+      description:
+        "**Действующий администратор или пользователь с подтверждённым e-mail** (для предложений рецептов; права читаются из БД). jpeg/png/webp до 5 МБ; тип определяется по сигнатуре файла. Обычным пользователям — не больше 20 загрузок в час (429 `RATE_LIMITED`); без подтверждённого e-mail — 403 `EMAIL_NOT_VERIFIED`.",
+      security: auth,
       requestBody: {
         required: true,
         content: { "multipart/form-data": { schema: obj({ file: str({ format: "binary" }) }, ["file"]) } },
@@ -426,6 +435,71 @@ const paths = {
     },
   },
 
+  // ---------- предложения рецептов ----------
+  "/me/submissions": {
+    get: {
+      tags: ["Предложения рецептов"],
+      summary: "Мои предложения",
+      description: "Только предложения текущего пользователя (новые сверху, до 100), со статусом и причиной отказа.",
+      security: auth,
+      responses: { 200: ok("Список", obj({ items: arr(ref("Submission")), limitPerDay: int })), 401: E[401] },
+    },
+    post: {
+      tags: ["Предложения рецептов"],
+      summary: "Предложить рецепт",
+      description:
+        "Нужен подтверждённый e-mail (403 `EMAIL_NOT_VERIFIED`). Рецепт уходит на модерацию (`PENDING`). Поля `slug` и `status` игнорируются; категория — только существующая; фото — только загруженное через `/uploads/image`; до 10 тегов. Лимит — `SUBMISSIONS_PER_DAY` (3) отправок за 24 часа: 429 `SUBMISSION_LIMIT`.",
+      security: auth,
+      requestBody: body(ref("SubmissionInput")),
+      responses: { 201: ok("Предложение создано", ref("Submission")), 401: E[401], 403: E[403], 422: E[422], 429: err("Лимит предложений (`SUBMISSION_LIMIT`) или общий лимит запросов") },
+    },
+  },
+  "/me/submissions/{id}": {
+    get: {
+      tags: ["Предложения рецептов"],
+      summary: "Моё предложение",
+      description: "Чужое или несуществующее предложение — 404.",
+      security: auth,
+      parameters: [idParam("id предложения")],
+      responses: { 200: ok("Предложение", ref("Submission")), 401: E[401], 404: E[404] },
+    },
+    put: {
+      tags: ["Предложения рецептов"],
+      summary: "Изменить предложение",
+      description:
+        "Пока оно `PENDING` или `REJECTED`; после одобрения — 409 `NOT_EDITABLE`. Правка отклонённого возвращает его на модерацию (причина стирается) и считается новой отправкой в лимите.",
+      security: auth,
+      parameters: [idParam("id предложения")],
+      requestBody: body(ref("SubmissionInput")),
+      responses: { 200: ok("Предложение после правки", ref("Submission")), 401: E[401], 403: E[403], 404: E[404], 409: err("Уже рассмотрено (`NOT_EDITABLE`)"), 422: E[422], 429: err("Лимит предложений (`SUBMISSION_LIMIT`)") },
+    },
+  },
+  "/admin/submissions": {
+    get: {
+      tags: ["Предложения рецептов"],
+      ...adminOnly("Очередь предложений", "Только `PENDING`, старые сверху, с автором. «Поправить и опубликовать» — обычный `PUT /recipes/{id}` со `status: PUBLISHED`."),
+      parameters: [page, limit(50)],
+      responses: { 200: ok("Страница очереди", pageOf(ref("SubmissionQueueItem"))), 401: E[401], 403: E[403], 422: E[422] },
+    },
+  },
+  "/admin/submissions/{id}/approve": {
+    post: {
+      tags: ["Предложения рецептов"],
+      ...adminOnly("Одобрить предложение", "Рецепт публикуется и поднимается в начало ленты. Уже рассмотренное — 409 `NOT_PENDING`."),
+      parameters: [idParam("id предложения")],
+      responses: { 200: ok("Опубликованный рецепт", ref("Submission")), 401: E[401], 403: E[403], 404: E[404], 409: err("Уже рассмотрено (`NOT_PENDING`)") },
+    },
+  },
+  "/admin/submissions/{id}/reject": {
+    post: {
+      tags: ["Предложения рецептов"],
+      ...adminOnly("Отклонить предложение", "Причина обязательна (3–500 символов), её видит автор. Отклонённые без правок 30 дней удаляются вместе с фото."),
+      parameters: [idParam("id предложения")],
+      requestBody: body(obj({ reason: str({ minLength: 3, maxLength: 500 }) }, ["reason"])),
+      responses: { 200: ok("Отклонённое предложение", ref("Submission")), 401: E[401], 403: E[403], 404: E[404], 409: err("Уже рассмотрено (`NOT_PENDING`)"), 422: E[422] },
+    },
+  },
+
   // ---------- admin ----------
   "/admin/users": {
     get: {
@@ -541,7 +615,7 @@ const schemas = {
     ...recipeFields,
     category: obj({ id: uuid, name: str(), slug: str() }),
     timeMinutes: nullableInt(),
-    status: str({ enum: ["DRAFT", "PUBLISHED"] }),
+    status: str({ enum: ["DRAFT", "PUBLISHED", "PENDING", "REJECTED"] }),
     createdAt: dateTime,
   }),
   RecipeIngredient: obj({ kind: itemKind, name: str(), amount: nullableStr() }),
@@ -576,6 +650,29 @@ const schemas = {
     },
     ["title", "category", "ingredients", "steps"]
   ),
+  SubmissionInput: obj(
+    {
+      title: str({ maxLength: 200 }),
+      category: str({ description: "Название СУЩЕСТВУЮЩЕЙ категории (из /categories)" }),
+      main: arr(str()),
+      tags: { type: "array", maxItems: 10, items: str({ maxLength: 40 }) },
+      image: nullableStr({ description: "URL фото, загруженного через /uploads/image" }),
+      time: nullableStr(),
+      servings: nullableStr(),
+      ingredients: { type: "array", minItems: 1, maxItems: 100, items: obj({ kind: itemKind, name: str(), amount: nullableStr() }, ["name"]) },
+      steps: { type: "array", minItems: 1, maxItems: 100, items: obj({ kind: itemKind, text: str(), timerSeconds: nullableInt() }, ["text"]) },
+    },
+    ["title", "category", "ingredients", "steps"]
+  ),
+  Submission: {
+    allOf: [
+      ref("Recipe"),
+      obj({ submittedAt: dateTime, rejectReason: nullableStr({ description: "Только у `REJECTED`" }), reviewedAt: { ...dateTime, nullable: true } }),
+    ],
+  },
+  SubmissionQueueItem: {
+    allOf: [ref("Submission"), obj({ author: obj({ id: uuid, displayName: str(), email: str() }) })],
+  },
   Note: obj({ slug: str(), text: str(), updatedAt: dateTime }),
   ShoppingEntry: obj(
     {
@@ -631,6 +728,7 @@ module.exports = {
     { name: "Рецепты" },
     { name: "Справочники" },
     { name: "Загрузки" },
+    { name: "Предложения рецептов" },
     { name: "Избранное и заметки" },
     { name: "Список покупок" },
     { name: "Синхронизация" },

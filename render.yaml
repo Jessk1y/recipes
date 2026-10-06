@@ -28,6 +28,7 @@ services:
         sync: false
       - key: CLOUDINARY_URL
         sync: false
+      # почтовые ключи НЕобязательны: без них сервер стартует в режиме «почта отключена» (см. server/README.md)
       - key: MAILJET_API_KEY
         sync: false
       - key: MAILJET_SECRET_KEY

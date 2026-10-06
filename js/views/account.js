@@ -3,6 +3,7 @@
 import { WAKE_HINT_AFTER } from "../config.js";
 import { els } from "./ui.js";
 import { getUser, getSync, isAdmin } from "../core/store.js";
+import { mailEnabled } from "../core/serverConfig.js";
 import * as sync from "../sync/sync.js";
 import * as endpoints from "../api/endpoints.js";
 import { ApiError, NetworkError } from "../api/client.js";
@@ -52,6 +53,7 @@ function syncText() {
 export function renderAccount() {
   const user = getUser();
   if (user) return renderProfile(user);
+  if (mode === "forgot" && !mailEnabled()) mode = "login"; // почта отключена — сброса по письму нет
   if (mode === "forgot") return renderForgot();
 
   const reg = mode === "register";
@@ -75,7 +77,7 @@ export function renderAccount() {
           <input name="confirmPassword" type="password" class="ct-input" maxlength="72" autocomplete="new-password" required></label>` : ""}
         <div id="authMsg" class="form-msg" hidden></div>
         <button class="tool-btn accent" id="authSubmit" type="submit">${reg ? "Зарегистрироваться" : "Войти"}</button>
-        ${!reg ? `<button class="link-btn" type="button" id="toForgot">Забыли пароль?</button>` : ""}
+        ${!reg && mailEnabled() ? `<button class="link-btn" type="button" id="toForgot">Забыли пароль?</button>` : ""}
       </form>
     </div>`;
   flash = "";
@@ -178,7 +180,7 @@ function renderProfile(user) {
     <div class="panel auth-panel">
       <h1 class="detail-title">👤 ${esc(user.displayName)}</h1>
       <p class="auth-hint">${esc(user.email)}${user.role === "ADMIN" ? ' · <span class="mini-tag">администратор</span>' : ""}</p>
-      ${user.emailVerified === false ? `
+      ${user.emailVerified === false && mailEnabled() ? `
         <div class="form-msg info verify-note">
           ✉️ E-mail не подтверждён. Мы отправили письмо со ссылкой — перейдите по ней (действует 24 часа).
           Неподтверждённый аккаунт удаляется через 7 дней после регистрации.
@@ -188,6 +190,7 @@ function renderProfile(user) {
       <p class="sync-line" id="syncLine">${esc(syncText())}</p>
       <div class="detail-actions">
         <button class="act-btn" id="syncNow">🔄 Синхронизировать</button>
+        <button class="act-btn" id="toMy">📨 Мои предложения</button>
         ${isAdmin() ? `<button class="act-btn" id="toAdmin">🛠 Админка</button>` : ""}
         <button class="act-btn" id="logoutBtn">🚪 Выйти</button>
       </div>
@@ -211,6 +214,7 @@ function renderProfile(user) {
     }
   });
   document.getElementById("syncNow").addEventListener("click", () => sync.flush().catch(() => {}));
+  document.getElementById("toMy").addEventListener("click", () => { location.hash = "#/my"; });
   const adm = document.getElementById("toAdmin");
   if (adm) adm.addEventListener("click", () => { location.hash = "#/admin"; });
   document.getElementById("logoutBtn").addEventListener("click", async (e) => {

@@ -829,3 +829,12 @@ a.act-btn { text-decoration: none; display: inline-flex; align-items: center; }
   .panel { border: none; box-shadow: none; padding: 0; }
   .detail-hero { max-height: 240px; }
 }
+
+/* предложения рецептов */
+.status-badge.pending { background: #fff1cc; color: #8a6100; }
+.status-badge.rejected { background: #fbe0dc; color: #b03a2e; }
+:root[data-theme="dark"] .status-badge.pending { background: #3d3216; color: #f0cf7a; }
+:root[data-theme="dark"] .status-badge.rejected { background: #40201c; color: #f1a79e; }
+.reject-reason { margin-top: 4px; font-size: .88rem; color: #b03a2e; }
+:root[data-theme="dark"] .reject-reason { color: #f1a79e; }
+.admin-tabs { margin: 0 0 14px; }

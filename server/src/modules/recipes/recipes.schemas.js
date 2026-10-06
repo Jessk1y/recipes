@@ -18,8 +18,7 @@ const step = z.object({
   timerSeconds: z.number().int().min(1).max(86400).nullish(),
 });
 
-const recipeInput = z
-  .object({
+const recipeShape = z.object({
     slug: z.string().max(100).regex(/^[a-z0-9]+(-[a-z0-9]+)*$/, "Только латиница, цифры и дефисы").optional(),
     title: z.string().trim().min(1, "Укажите название").max(200),
     category: z.string().trim().min(1, "Укажите категорию").max(50),
@@ -37,15 +36,21 @@ const recipeInput = z
     ingredients: z.array(ingredient).min(1, "Нужен хотя бы один ингредиент").max(100),
     steps: z.array(step).min(1, "Нужен хотя бы один шаг").max(100),
     status: z.enum(["DRAFT", "PUBLISHED"]).default("DRAFT"),
-  })
-  .refine((r) => r.ingredients.some((i) => i.kind === "ITEM"), {
-    path: ["ingredients"],
-    message: "Нужен хотя бы один ингредиент, а не только подзаголовки",
-  })
-  .refine((r) => r.steps.some((s) => s.kind === "ITEM"), {
-    path: ["steps"],
-    message: "Нужен хотя бы один шаг, а не только подзаголовки",
   });
+
+// общие проверки для рецепта админа и предложения пользователя
+const withContent = (schema) =>
+  schema
+    .refine((r) => r.ingredients.some((i) => i.kind === "ITEM"), {
+      path: ["ingredients"],
+      message: "Нужен хотя бы один ингредиент, а не только подзаголовки",
+    })
+    .refine((r) => r.steps.some((s) => s.kind === "ITEM"), {
+      path: ["steps"],
+      message: "Нужен хотя бы один шаг, а не только подзаголовки",
+    });
+
+const recipeInput = withContent(recipeShape);
 
 const statusInput = z.object({ status: z.enum(["DRAFT", "PUBLISHED"]) });
 
@@ -55,11 +60,11 @@ const listQuery = z.object({
   category: z.string().max(50).optional(), // slug
   maxTime: z.coerce.number().int().min(1).max(100000).optional(),
   sort: z.enum(["new", "time", "title"]).default("new"),
-  status: z.enum(["PUBLISHED", "DRAFT", "all"]).optional(), // не-PUBLISHED — только админу
+  status: z.enum(["PUBLISHED", "DRAFT", "all"]).optional(), // не-PUBLISHED — только админу; all = DRAFT + PUBLISHED (предложения — в /admin/submissions)
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(50).default(20),
 });
 
 const randomQuery = z.object({ main: z.string().max(200).optional() });
 
-module.exports = { recipeInput, statusInput, listQuery, randomQuery };
+module.exports = { recipeShape, withContent, recipeInput, statusInput, listQuery, randomQuery };

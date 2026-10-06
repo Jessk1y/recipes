@@ -442,7 +442,7 @@ test("шаблоны: HTML экранируется, ссылка ведёт н�
 });
 
 // ---------- конфигурация ----------
-test("env: в production без Brevo/FRONTEND_URL сервер не стартует, с ними — стартует", () => {
+test("env: в production с ключами почты нужны FRONTEND_URL и отправитель; без ключей сервер стартует (почта отключена)", () => {
   const script = path.join(__dirname, "..", "src", "config", "env.js");
   const base = {
     PATH: process.env.PATH, SystemRoot: process.env.SystemRoot,
@@ -451,9 +451,9 @@ test("env: в production без Brevo/FRONTEND_URL сервер не старт�
   };
   const run = (extra) => spawnSync(process.execPath, [script], { env: { ...base, ...extra }, encoding: "utf8" });
 
+  // без ключей почты сервер стартует в режиме «почта отключена» (см. tests/mail-mode.test.js)
   const noMail = run({ FRONTEND_URL: "https://site.example" });
-  assert.equal(noMail.status, 1);
-  assert.match(noMail.stderr, /Brevo/);
+  assert.equal(noMail.status, 0, noMail.stderr);
   const noFront = run({ BREVO_API_KEY: "k", MAIL_FROM_EMAIL: "a@example.com" });
   assert.equal(noFront.status, 1);
   assert.match(noFront.stderr, /FRONTEND_URL/);

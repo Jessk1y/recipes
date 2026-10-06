@@ -40,11 +40,14 @@ export async function raw(path, { method = "GET", body, form, token, timeout = 1
   } finally {
     clearTimeout(timer);
   }
-  // 502–504 отдаёт прокси Render, пока сервер просыпается
-  if ([502, 503, 504].includes(res.status)) throw new NetworkError("Сервер временно недоступен");
   if (res.status === 204) return null;
   let json = null;
   try { json = await res.json(); } catch (e) {}
+  // 502–504 без JSON-ошибки API отдаёт прокси Render, пока сервер просыпается;
+  // 503 MAIL_DISABLED («почта отключена») — ответ самого API, его показываем как есть
+  if ([502, 503, 504].includes(res.status) && !(json && json.error && json.error.code)) {
+    throw new NetworkError("Сервер временно недоступен");
+  }
   if (!res.ok) {
     const err = (json && json.error) || {};
     throw new ApiError(res.status, err.code || "HTTP_" + res.status, err.message || "Ошибка сервера", err.details);

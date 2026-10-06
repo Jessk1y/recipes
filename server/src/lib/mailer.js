@@ -6,6 +6,7 @@
 // Тексты писем — в lib/mailTemplates.js.
 const env = require("../config/env");
 const logger = require("./logger");
+const { AppError } = require("./errors");
 
 const BREVO_URL = "https://api.brevo.com/v3/smtp/email";
 const MAILJET_URL = "https://api.mailjet.com/v3.1/send";
@@ -58,7 +59,12 @@ async function sendViaMailjet({ to, subject, html, text }) {
   }
 }
 
+// режим «почта отключена» (в production нет ключей Brevo/Mailjet): сюда письма попадать не должны —
+// вызывающий код сначала проверяет env.mailEnabled; это страховка от случайной отправки
+const mailDisabled = () => new AppError(503, "MAIL_DISABLED", "Отправка писем временно недоступна");
+
 const drivers = {
+  off: async () => { throw mailDisabled(); },
   mailjet: sendViaMailjet,
   brevo: sendViaBrevo,
   async log({ to, subject, text }) {
@@ -68,6 +74,10 @@ const drivers = {
     outbox.push({ ...mail, at: Date.now() });
   },
 };
+
+// Включена ли почта (меняется тестами на лету)
+const enabled = () => env.mailEnabled;
+const assertEnabled = () => { if (!enabled()) throw mailDisabled(); };
 
 // Отправить и дождаться результата (бросает ошибку при сбое)
 function send(mail) {
@@ -87,4 +97,4 @@ function sendInBackground(mail) {
 // Дождаться фоновых отправок (тесты, остановка сервера)
 const idle = () => Promise.allSettled([...pending]);
 
-module.exports = { send, sendInBackground, idle, outbox, drivers };
+module.exports = { send, sendInBackground, idle, outbox, drivers, enabled, assertEnabled };

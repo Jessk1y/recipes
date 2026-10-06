@@ -1,6 +1,7 @@
 const { AppError } = require("../lib/errors");
 const { verifyAccessToken } = require("../lib/jwt");
 const prisma = require("../lib/prisma");
+const env = require("../config/env");
 
 function readToken(req) {
   const m = /^Bearer (.+)$/.exec(req.headers.authorization || "");
@@ -62,11 +63,29 @@ async function requireVerifiedEmail(req, res, next) {
     const user = await prisma.user.findUnique({ where: { id: req.user.id }, select: { emailVerifiedAt: true, isBlocked: true } });
     if (!user) return next(new AppError(401, "UNAUTHORIZED", "Пользователь не найден"));
     if (user.isBlocked) return next(new AppError(403, "ACCOUNT_BLOCKED", "Аккаунт заблокирован"));
-    if (!user.emailVerifiedAt) return next(new AppError(403, "EMAIL_NOT_VERIFIED", "Подтвердите e-mail, чтобы выполнить это действие"));
+    // при отключённой почте подтверждать нечем — требование снято (блокировка по-прежнему действует)
+    if (env.mailEnabled && !user.emailVerifiedAt) return next(new AppError(403, "EMAIL_NOT_VERIFIED", "Подтвердите e-mail, чтобы выполнить это действие"));
     next();
   } catch (e) {
     next(e);
   }
 }
 
-module.exports = { requireAuth, optionalAuth, requireRole, requireActiveAdmin, requireVerifiedEmail };
+// Загрузка фото: действующий админ или пользователь с подтверждённым e-mail (для предложений рецептов).
+// Роль и подтверждение читаются из БД; req.isAdminUpload — чтобы лимит загрузок не действовал на админа.
+async function requireUploader(req, res, next) {
+  try {
+    const user = await prisma.user.findUnique({ where: { id: req.user.id }, select: { role: true, isBlocked: true, emailVerifiedAt: true } });
+    if (!user) return next(new AppError(401, "UNAUTHORIZED", "Пользователь не найден"));
+    if (user.isBlocked) return next(new AppError(403, "ACCOUNT_BLOCKED", "Аккаунт заблокирован"));
+    req.isAdminUpload = user.role === "ADMIN";
+    if (env.mailEnabled && !req.isAdminUpload && !user.emailVerifiedAt) {
+      return next(new AppError(403, "EMAIL_NOT_VERIFIED", "Подтвердите e-mail, чтобы загружать фото"));
+    }
+    next();
+  } catch (e) {
+    next(e);
+  }
+}
+
+module.exports = { requireAuth, optionalAuth, requireRole, requireActiveAdmin, requireVerifiedEmail, requireUploader };

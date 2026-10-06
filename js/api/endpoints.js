@@ -17,6 +17,9 @@ export const resetPassword = (token, password, confirmPassword) =>
 export const logout = (refreshToken) => api("/auth/logout", { auth: true, method: "POST", body: { refreshToken }, timeout: 10000 });
 export const me = () => api("/auth/me", { auth: true, ...slow });
 
+// публичные настройки сервера (mailEnabled: false — почта отключена)
+export const serverConfig = () => raw("/config", { timeout: 10000 });
+
 // ---------- каталог ----------
 // cache: "no-cache" — браузер сам отправит If-None-Match и при неизменном каталоге получит короткий 304
 export const snapshot = () => raw("/catalog/snapshot", { cache: "no-cache", ...slow });
@@ -39,6 +42,22 @@ export const createRecipe = (input) => api("/recipes", { auth: true, ...post(inp
 export const updateRecipe = (id, input) => api(`/recipes/${id}`, { auth: true, method: "PUT", body: input, ...slow });
 export const setRecipeStatus = (id, status) => api(`/recipes/${id}/status`, { auth: true, method: "PATCH", body: { status }, ...slow });
 export const deleteRecipe = (id) => api(`/recipes/${id}`, { auth: true, method: "DELETE", ...slow });
+// ---------- предложения рецептов ----------
+export const mySubmissions = () => api("/me/submissions", { auth: true, ...slow });
+export const mySubmission = (id) => api(`/me/submissions/${encodeURIComponent(id)}`, { auth: true, ...slow });
+export const submitRecipe = (input) => api("/me/submissions", { auth: true, ...post(input) });
+export const updateSubmission = (id, input) => api(`/me/submissions/${encodeURIComponent(id)}`, { auth: true, method: "PUT", body: input, ...slow });
+export async function adminQueue() {
+  const all = [];
+  for (let page = 1; ; page++) {
+    const r = await api(`/admin/submissions?limit=50&page=${page}`, { auth: true, ...slow });
+    all.push(...r.items);
+    if (all.length >= r.total || !r.items.length) return all;
+  }
+}
+export const approveSubmission = (id) => api(`/admin/submissions/${encodeURIComponent(id)}/approve`, { auth: true, ...post() });
+export const rejectSubmission = (id, reason) => api(`/admin/submissions/${encodeURIComponent(id)}/reject`, { auth: true, ...post({ reason }) });
+
 export function uploadImage(file) {
   const form = new FormData();
   form.append("file", file);

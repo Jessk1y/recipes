@@ -8,6 +8,10 @@ const server = app.listen(env.PORT, () =>
   logger.info(`API запущен: http://localhost:${env.PORT}/api/v1/health`)
 );
 
+if (!env.mailEnabled) {
+  logger.warn("почта отключена: нет ключей Brevo/Mailjet — e-mail не подтверждается (все считаются подтверждёнными), «забыли пароль» недоступно (пароли сбрасывает админ: npm run set-password)");
+}
+
 cleanup.schedule();
 
 function shutdown() {

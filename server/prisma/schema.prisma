@@ -12,9 +12,12 @@ enum Role {
   ADMIN
 }
 
+// PENDING / REJECTED — предложения пользователей (submittedAt задан); видны только автору и админу
 enum RecipeStatus {
   DRAFT
   PUBLISHED
+  PENDING
+  REJECTED
 }
 
 enum ItemKind {
@@ -109,6 +112,10 @@ model Recipe {
   timeMinutes Int?         @map("time_minutes")
   servings    String?
   status      RecipeStatus @default(PUBLISHED)
+  // предложение пользователя: время последней отправки на модерацию (для лимита в сутки), причина отказа, время решения
+  submittedAt  DateTime?    @map("submitted_at")
+  rejectReason String?      @map("reject_reason")
+  reviewedAt   DateTime?    @map("reviewed_at")
   createdAt   DateTime     @default(now()) @map("created_at")
   updatedAt   DateTime     @updatedAt @map("updated_at")
 
@@ -122,6 +129,7 @@ model Recipe {
   contribs    ShoppingContrib[]
 
   @@index([status, createdAt])
+  @@index([authorId, submittedAt])
   @@index([timeMinutes])
   @@map("recipes")
 }

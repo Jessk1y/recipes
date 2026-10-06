@@ -54,7 +54,7 @@ async function list(q, user) {
     throw new AppError(403, "FORBIDDEN", "Черновики доступны только администратору");
   }
   const and = [];
-  if (status !== "all") and.push({ status });
+  and.push(status === "all" ? { status: { in: ["DRAFT", "PUBLISHED"] } } : { status });
   if (q.category) and.push({ category: { slug: q.category } });
   if (q.maxTime) and.push({ timeMinutes: { lte: q.maxTime } });
   for (const m of splitList(q.main)) and.push({ tags: { some: { tag: { name: m, isMain: true } } } });
@@ -168,11 +168,14 @@ async function releaseImage(url) {
   }
 }
 
-async function write(id, input, authorId) {
+// hooks (для предложений пользователей): before(tx) — проверки/захват строки в начале транзакции,
+// data — дополнительные поля рецепта (submittedAt и т.п.)
+async function write(id, input, authorId, hooks = {}) {
   let oldImage = null;
   let result;
   try {
     result = await prisma.$transaction(async (tx) => {
+      if (hooks.before) await hooks.before(tx);
       const category = await tx.category.upsert({
         where: { slug: slugify(input.category) || "bez-kategorii" },
         update: {},
@@ -198,6 +201,7 @@ async function write(id, input, authorId) {
         timeMinutes: timeMinutes(input.time),
         servings: input.servings,
         status: input.status,
+        ...hooks.data,
       };
       const children = {
         tags: tagIds.map((tagId) => ({ tagId })),
@@ -217,9 +221,14 @@ async function write(id, input, authorId) {
 
       let recipeId = id;
       if (id) {
-        const found = await tx.recipe.findUnique({ where: { id }, select: { image: true } });
+        const found = await tx.recipe.findUnique({ where: { id }, select: { image: true, status: true, submittedAt: true } });
         if (!found) throw notFound();
         oldImage = found.image;
+        // админ «поправил и опубликовал» предложение: фиксируем решение, поднимаем рецепт в начало ленты
+        if (!hooks.data && found.submittedAt && found.status !== "PUBLISHED" && input.status === "PUBLISHED") {
+          const now = new Date();
+          Object.assign(data, { reviewedAt: now, rejectReason: null, createdAt: now });
+        }
         await tx.recipeTag.deleteMany({ where: { recipeId: id } });
         await tx.ingredient.deleteMany({ where: { recipeId: id } });
         await tx.step.deleteMany({ where: { recipeId: id } });
@@ -250,6 +259,10 @@ const create = (input, user) => write(null, input, user.id);
 const update = (id, input) => write(parseId(id), input);
 
 async function setStatus(id, status) {
+  const cur = await prisma.recipe.findUnique({ where: { id: parseId(id) }, select: { status: true } });
+  if (cur && (cur.status === "PENDING" || cur.status === "REJECTED")) {
+    throw new AppError(409, "USE_MODERATION", "Предложения пользователей обрабатываются через /admin/submissions");
+  }
   try {
     const r = await prisma.recipe.update({ where: { id: parseId(id) }, data: { status } });
     return { id: r.id, status: r.status };
@@ -266,4 +279,4 @@ async function remove(id) {
   await releaseImage(r.image);
 }
 
-module.exports = { list, getBySlug, random, snapshot, snapshotVersion, create, update, setStatus, remove };
+module.exports = { fullInclude, toFull, releaseImage, write, notFound, parseId, list, getBySlug, random, snapshot, snapshotVersion, create, update, setStatus, remove };

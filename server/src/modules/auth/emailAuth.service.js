@@ -64,6 +64,7 @@ async function sendVerificationAfterRegister(user) {
 }
 
 async function resendVerification(userId) {
+  mailer.assertEnabled(); // почта отключена → 503 MAIL_DISABLED
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) throw new AppError(401, "UNAUTHORIZED", "Пользователь не найден");
   if (user.isBlocked) throw new AppError(403, "ACCOUNT_BLOCKED", "Аккаунт заблокирован");
@@ -96,6 +97,7 @@ async function verifyEmail({ token }) {
 // Вызывающий всегда отвечает одинаково — не раскрываем, зарегистрирован ли e-mail.
 // Письмо уходит в фоне (время ответа не зависит от того, есть ли такой пользователь).
 async function forgotPassword({ email }) {
+  mailer.assertEnabled(); // одинаковый ответ для всех e-mail, поэтому не раскрывает, кто зарегистрирован
   const user = await prisma.user.findUnique({ where: { email } });
   if (!user || user.isBlocked) return;
   const { count, last } = await recentCount(user.id, "RESET");

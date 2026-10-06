@@ -7,12 +7,14 @@ import { state, els } from "./views/ui.js";
 import { subscribe, getUser } from "./core/store.js";
 import { loadLocalCatalog, refreshCatalog, catalogLoading } from "./sync/catalog.js";
 import { startSync, refreshProfile } from "./sync/sync.js";
+import { loadServerConfig } from "./core/serverConfig.js";
 import { setAccessToken } from "./api/client.js";
 import { buildToolbar, buildTags, renderList, updateAdminBtn } from "./views/list.js";
 import { renderDetail, refreshDetailData } from "./views/detail.js";
 import { renderShopping, updateShoppingBadge } from "./views/shopping.js";
 import { renderAccount, renderVerify, renderReset, updateAccountBtn, updateSyncLine } from "./views/account.js";
 import { renderAdmin } from "./views/admin.js";
+import { renderMy } from "./views/submissions.js";
 import { clearAllTimers } from "./views/timers.js";
 import { releaseWake } from "./views/wake.js";
 import { initTheme } from "./views/theme.js";
@@ -60,6 +62,14 @@ function route() {
     els.accountView.hidden = false;
     document.body.classList.add("detail-open");
     if (hash.startsWith("#/verify")) renderVerify(hash); else renderReset(hash);
+    releaseWake();
+    window.scrollTo(0, 0);
+  } else if (/^#\/my(\/|$)/.test(hash)) {
+    // «Мои предложения» живут на экране аккаунта
+    view = "account";
+    els.accountView.hidden = false;
+    document.body.classList.add("detail-open");
+    renderMy(hash.slice("#/my".length));
     releaseWake();
     window.scrollTo(0, 0);
   } else if (hash.startsWith("#/admin")) {
@@ -154,6 +164,10 @@ async function boot() {
   });
   startSync();
   if (getUser()) refreshProfile();
+  // режим почты от сервера: при смене перерисовываем экран аккаунта (кроме страниц по ссылкам из писем — там токен)
+  loadServerConfig().then((changed) => {
+    if (changed && view === "account" && !/^#\/(verify|reset)/.test(location.hash)) route();
+  });
 }
 
 boot();

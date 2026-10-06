@@ -4,6 +4,7 @@
 //   write  — запросы, меняющие данные (POST/PUT/PATCH/DELETE), кроме sync;
 //   sync   — POST /me/sync (дорогая операция: транзакция и пересчёт состояния);
 //   auth   — весь /auth (перебор паролей);
+//   upload — загрузка фото обычными пользователями (по id пользователя; админ без лимита);
 //   mail   — эндпоинты, отправляющие письма (повторное подтверждение, «забыли пароль»).
 // Лимиты лежат в изменяемом объекте `limits`, чтобы тесты могли временно занизить их на настоящем app.
 const { rateLimit, MemoryStore } = require("express-rate-limit");
@@ -19,6 +20,7 @@ const limits = {
   sync: { windowMs: 15 * MIN, limit: loose ?? 300 },
   auth: { windowMs: 15 * MIN, limit: loose ?? 30 },
   mail: { windowMs: 60 * MIN, limit: loose ?? 10 },
+  upload: { windowMs: 60 * MIN, limit: loose ?? 20 },
 };
 
 const stores = {};
@@ -46,6 +48,8 @@ module.exports = {
   sync: make("sync"),
   auth: make("auth"),
   mail: make("mail"),
+  // после requireUploader: ключ — пользователь, а не IP (за одним IP могут быть разные люди)
+  upload: make("upload", { skip: (req) => req.isAdminUpload, keyGenerator: (req) => req.user.id, validate: { keyGeneratorIpFallback: false } }),
   // для тестов: обнулить счётчики всех лимитов
   resetAll: () => Object.values(stores).forEach((s) => s.resetAll()),
 };

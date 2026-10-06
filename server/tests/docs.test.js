@@ -51,8 +51,8 @@ test("админские операции помечены security и 403", () 
       if (item[m].description?.startsWith("**Только администратор.**")) adminOps.push([m, p, item[m]]);
     }
   }
-  // 4 записи рецептов + загрузка фото + 3 метода admin
-  assert.equal(adminOps.length, 8, `админских операций: ${adminOps.length}`);
+  // 4 записи рецептов + 3 метода admin/users + 3 метода admin/submissions (загрузка фото — не только админам)
+  assert.equal(adminOps.length, 10, `админских операций: ${adminOps.length}`);
   for (const [m, p, op] of adminOps) {
     assert.ok(op.security, `${m} ${p}: security`);
     assert.ok(op.responses[403], `${m} ${p}: 403`);
@@ -69,10 +69,12 @@ test("спецификация совпадает с реальными марш
     media: "/uploads",
     shopping: "/me/shopping",
     sync: "/me/sync",
+    submissions: "/me/submissions",
     me: "/me",
     admin: "/admin",
   };
   const real = new Set(["GET /health", "GET /catalog/snapshot"]);
+  // модерация предложений лежит в admin.router.js, но описана в модуле submissions — проверяется там же
   for (const [mod, prefix] of Object.entries(mounts)) {
     const src = fs.readFileSync(path.join(__dirname, `../src/modules/${mod}/${mod}.router.js`), "utf8");
     const re = /router\.(get|post|put|patch|delete)\(\s*"([^"]*)"/g;

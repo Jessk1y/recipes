@@ -1,17 +1,14 @@
-// Админ-панель рецептов: #/admin (список, включая черновики), #/admin/new, #/admin/edit/<slug>.
+// Админ-панель рецептов: #/admin (список, включая черновики), #/admin/new, #/admin/edit/<slug>,
+// #/admin/submissions (предложения пользователей) и #/admin/review/<slug> (поправить и опубликовать).
 // Работает только онлайн (без outbox); права проверяет сервер — здесь только скрываем лишнее.
-import { MAIN_TAGS, WAKE_HINT_AFTER } from "../config.js";
+import { WAKE_HINT_AFTER } from "../config.js";
 import { els } from "./ui.js";
 import { isAdmin } from "../core/store.js";
 import * as endpoints from "../api/endpoints.js";
 import { ApiError, NetworkError, imageUrl } from "../api/client.js";
 import { refreshCatalog } from "../sync/catalog.js";
 import { esc, toast, emojiFor } from "../lib/utils.js";
-
-const FIELD_NAMES = {
-  title: "Название", slug: "Адрес (slug)", category: "Категория", main: "Основные теги", tags: "Теги",
-  image: "Фото", time: "Время", servings: "Порции", ingredients: "Ингредиенты", steps: "Шаги", status: "Статус",
-};
+import { mountRecipeForm } from "./recipeForm.js";
 
 let renderSeq = 0; // защита от устаревших ответов при быстрой смене экранов
 
@@ -25,8 +22,11 @@ export function renderAdmin(path) {
     return;
   }
   const m = path.match(/^\/edit\/(.+)$/);
+  const rv = path.match(/^\/review\/(.+)$/);
   if (path === "/new") renderForm(null, seq);
   else if (m) renderForm(decodeURIComponent(m[1]), seq);
+  else if (rv) renderReview(decodeURIComponent(rv[1]), seq);
+  else if (path === "/submissions") renderQueue(seq);
   else renderList(seq);
 }
 
@@ -47,6 +47,22 @@ function showError(err, retry) {
     <p class="empty">⚠️ ${esc(msg)}<br><br><button class="tool-btn" id="adRetry">Повторить</button></p>`;
   document.getElementById("adBack").addEventListener("click", () => { location.hash = "#"; });
   document.getElementById("adRetry").addEventListener("click", retry);
+}
+
+// ---------- Вкладки «Рецепты | Предложенные» ----------
+let queueCount = null; // число предложений на модерации (обновляется при открытии очереди)
+function tabs(active, count) {
+  if (count !== undefined) queueCount = count;
+  const n = queueCount ? ` (${queueCount})` : "";
+  return `<div class="auth-tabs admin-tabs">
+    <button class="tag-chip${active === "recipes" ? " active" : ""}" data-tab="recipes">Рецепты</button>
+    <button class="tag-chip${active === "submissions" ? " active" : ""}" data-tab="submissions">Предложенные<span class="tab-count">${n}</span></button>
+  </div>`;
+}
+function bindTabs() {
+  document.querySelectorAll(".admin-tabs [data-tab]").forEach((b) => b.addEventListener("click", () => {
+    location.hash = b.dataset.tab === "recipes" ? "#/admin" : "#/admin/submissions";
+  }));
 }
 
 // ---------- Список ----------
@@ -70,9 +86,18 @@ async function renderList(seq) {
       <button class="tool-btn accent" id="adNew">＋ Новый рецепт</button>
     </div>
     <h1 class="detail-title">🛠 Рецепты</h1>
+    ${tabs("recipes")}
     <div class="search-box admin-search"><input id="adFilter" type="search" placeholder="Найти рецепт…" value="${esc(filter)}"></div>
     <div class="count" id="adCount"></div>
     <ul class="admin-list" id="adList"></ul>`;
+  bindTabs();
+  // число предложений на вкладке — в фоне, без блокировки списка
+  endpoints.adminQueue().then((q) => {
+    if (seq !== renderSeq) return;
+    queueCount = q.length;
+    const cnt = document.querySelector('[data-tab="submissions"] .tab-count');
+    if (cnt) cnt.textContent = q.length ? ` (${q.length})` : "";
+  }).catch(() => {});
 
   const listEl = document.getElementById("adList");
   const draw = () => {
@@ -133,22 +158,6 @@ async function renderList(seq) {
 }
 
 // ---------- Форма ----------
-// Ингредиенты и шаги — по строке на пункт; строка «# Текст» — подзаголовок. Ингредиент: «Мука — 200 г».
-const toLines = (arr, key) => arr.map((x) => (x.kind === "HEADER" ? "# " + x[key] : key === "name" && x.amount ? `${x.name} — ${x.amount}` : x[key])).join("\n");
-
-function parseLines(text) {
-  return text.split("\n").map((l) => l.trim()).filter(Boolean).map((l) =>
-    l.startsWith("#") ? { kind: "HEADER", value: l.replace(/^#+\s*/, "") } : { kind: "ITEM", value: l });
-}
-function parseIngredients(text) {
-  return parseLines(text).map(({ kind, value }) => {
-    if (kind === "HEADER") return { kind, name: value };
-    const m = value.match(/^(.+?)\s*—\s*(.*)$/) || value.match(/^(.+?)\s+[–-]\s+(.*)$/);
-    return m ? { kind, name: m[1].trim(), amount: m[2].trim() || null } : { kind, name: value, amount: null };
-  });
-}
-const parseSteps = (text) => parseLines(text).map(({ kind, value }) => ({ kind, text: value }));
-
 async function renderForm(slug, seq) {
   const hint = loading(slug ? "Загрузка рецепта…" : "Подготовка формы…");
   let recipe = null, cats = [];
@@ -164,132 +173,118 @@ async function renderForm(slug, seq) {
     clearTimeout(hint);
   }
   if (seq !== renderSeq) return;
-
-  const r = recipe || { title: "", slug: "", category: { name: "" }, main: [], tags: [], image: null, time: "", servings: "", ingredients: [], steps: [], status: "DRAFT" };
-  let image = r.image || null;
-
-  els.adminView.innerHTML = `
-    <div class="detail-top">
-      <button class="back-btn" id="adBack">← К рецептам</button>
-      ${recipe && recipe.status === "PUBLISHED" ? `<a class="act-btn" href="#/recipe/${encodeURIComponent(recipe.slug)}">Открыть на сайте</a>` : ""}
-    </div>
-    <h1 class="detail-title">${recipe ? "✏️ " + esc(recipe.title) : "＋ Новый рецепт"}</h1>
-    <form id="recipeForm" class="form admin-form" novalidate>
-      <div id="formMsg" class="form-msg" hidden></div>
-      <label class="field">Название *<input name="title" class="ct-input" maxlength="200" value="${esc(r.title)}" required></label>
-      <div class="field-row">
-        <label class="field">Категория *<input name="category" class="ct-input" list="catList" maxlength="50" value="${esc(r.category.name)}" required>
-          <datalist id="catList">${cats.map((c) => `<option value="${esc(c.name)}">`).join("")}</datalist></label>
-        <label class="field">Время<input name="time" class="ct-input" maxlength="50" placeholder="40 мин, 1 ч 10 мин" value="${esc(r.time || "")}"></label>
-        <label class="field">Порции<input name="servings" class="ct-input" maxlength="100" placeholder="4 порции" value="${esc(r.servings || "")}"></label>
-      </div>
-      <fieldset class="field"><legend>Основные теги * <span class="hint">(фильтр на главной)</span></legend>
-        <div class="main-tags">${MAIN_TAGS.map((t) => `<label class="tag-check"><input type="checkbox" name="main" value="${esc(t)}"${r.main.includes(t) ? " checked" : ""}> ${esc(t)}</label>`).join("")}</div>
-      </fieldset>
-      <label class="field">Теги для поиска <span class="hint">(через запятую)</span><input name="tags" class="ct-input" value="${esc(r.tags.join(", "))}"></label>
-
-      <div class="field">Фото <span class="hint">(jpeg, png или webp, до 5 МБ)</span>
-        <div class="photo-box">
-          <div class="detail-hero photo-preview" id="photoPreview"></div>
-          <div class="photo-btns">
-            <label class="tool-btn file-btn">📷 Загрузить<input type="file" id="photoFile" accept="image/jpeg,image/png,image/webp" hidden></label>
-            <button type="button" class="tool-btn" id="photoRemove">Убрать фото</button>
-          </div>
-        </div>
-      </div>
-
-      <label class="field">Ингредиенты * <span class="hint">— по строке: «Мука — 200 г»; «# Для соуса» — подзаголовок</span>
-        <textarea name="ingredients" class="note-area admin-area" rows="10">${esc(toLines(r.ingredients, "name"))}</textarea></label>
-      <label class="field">Шаги * <span class="hint">— по строке на шаг; «# Тесто» — подзаголовок; время в тексте («15 мин») даёт таймер</span>
-        <textarea name="steps" class="note-area admin-area" rows="10">${esc(toLines(r.steps, "text"))}</textarea></label>
-
-      <div class="field-row">
-        <label class="field">Статус<select name="status" class="ct-input">
-          <option value="DRAFT"${r.status === "DRAFT" ? " selected" : ""}>Черновик (видно только админу)</option>
-          <option value="PUBLISHED"${r.status === "PUBLISHED" ? " selected" : ""}>Опубликован</option>
-        </select></label>
-        <label class="field">Адрес (slug) <span class="hint">— пусто: из названия</span><input name="slug" class="ct-input" maxlength="100" placeholder="tort-napoleon" value="${esc(r.slug || "")}"></label>
-      </div>
-      <div class="detail-actions">
-        <button class="tool-btn accent" type="submit" id="saveBtn">💾 Сохранить</button>
-        <button class="tool-btn" type="button" id="cancelBtn">Отмена</button>
-      </div>
-    </form>`;
-
-  const form = document.getElementById("recipeForm");
-  const preview = document.getElementById("photoPreview");
-  const drawPhoto = () => {
-    preview.innerHTML = image ? `<img src="${esc(imageUrl(image))}" alt="">` : `<span class="photo-empty">Нет фото — будет эмодзи</span>`;
-    document.getElementById("photoRemove").hidden = !image;
-  };
-  drawPhoto();
-  const back = () => { location.hash = "#/admin"; };
-  document.getElementById("adBack").addEventListener("click", back);
-  document.getElementById("cancelBtn").addEventListener("click", back);
-  document.getElementById("photoRemove").addEventListener("click", () => { image = null; drawPhoto(); });
-  document.getElementById("photoFile").addEventListener("change", async (e) => {
-    const file = e.target.files[0];
-    e.target.value = "";
-    if (!file) return;
-    if (file.size > 5 * 1024 * 1024) { msg("Файл больше 5 МБ", "err"); return; }
-    preview.innerHTML = `<span class="photo-empty">Загрузка фото…</span>`;
-    try {
-      image = (await endpoints.uploadImage(file)).url;
-      msg("");
-    } catch (err) {
-      msg("Фото не загрузилось: " + (err instanceof NetworkError ? "нет связи с сервером" : err.message), "err");
-    }
-    drawPhoto();
-  });
-
-  form.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const input = {
-      title: form.title.value.trim(),
-      category: form.category.value.trim(),
-      main: [...form.querySelectorAll('input[name="main"]:checked')].map((c) => c.value),
-      tags: form.tags.value.split(",").map((t) => t.trim()).filter(Boolean),
-      image,
-      time: form.time.value.trim() || null,
-      servings: form.servings.value.trim() || null,
-      ingredients: parseIngredients(form.ingredients.value),
-      steps: parseSteps(form.steps.value),
-      status: form.status.value,
-    };
-    const slugVal = form.slug.value.trim();
-    if (slugVal) input.slug = slugVal;
-
-    const errs = [];
-    if (!input.title) errs.push("Укажите название");
-    if (!input.category) errs.push("Укажите категорию");
-    if (!input.main.length) errs.push("Отметьте хотя бы один основной тег");
-    if (!input.ingredients.some((i) => i.kind === "ITEM")) errs.push("Нужен хотя бы один ингредиент");
-    if (!input.steps.some((s) => s.kind === "ITEM")) errs.push("Нужен хотя бы один шаг");
-    if (errs.length) { msg(errs.join(" · "), "err"); return; }
-
-    const btn = document.getElementById("saveBtn");
-    btn.disabled = true;
-    msg("Сохранение…", "info");
-    try {
-      const saved = recipe ? await endpoints.updateRecipe(recipe.id, input) : await endpoints.createRecipe(input);
+  mountRecipeForm(els.adminView, {
+    mode: "admin", recipe, cats,
+    title: recipe ? "✏️ " + recipe.title : "＋ Новый рецепт",
+    backLabel: "← К рецептам", onBack: () => { location.hash = "#/admin"; },
+    topExtra: recipe && recipe.status === "PUBLISHED" ? `<a class="act-btn" href="#/recipe/${encodeURIComponent(recipe.slug)}">Открыть на сайте</a>` : "",
+    save: (input) => (recipe ? endpoints.updateRecipe(recipe.id, input) : endpoints.createRecipe(input)),
+    onSaved: (saved) => {
       toast(saved.status === "PUBLISHED" ? "Сохранено и опубликовано ✅" : "Сохранено как черновик ✅");
       refreshCatalog().catch(() => {});
-      back();
+      location.hash = "#/admin";
+    },
+  });
+}
+
+// ---------- Предложенные (модерация) ----------
+async function renderQueue(seq) {
+  const hint = loading("Загрузка предложений…");
+  let items;
+  try {
+    items = await endpoints.adminQueue();
+  } catch (e) {
+    if (seq === renderSeq) showError(e, () => renderAdmin("/submissions"));
+    return;
+  } finally {
+    clearTimeout(hint);
+  }
+  if (seq !== renderSeq) return;
+  els.adminView.innerHTML = `
+    <div class="detail-top"><button class="back-btn" id="adBack">← К сайту</button></div>
+    <h1 class="detail-title">🛠 Рецепты</h1>
+    ${tabs("submissions", items.length)}
+    <ul class="admin-list" id="adList"></ul>`;
+  bindTabs();
+  document.getElementById("adBack").addEventListener("click", () => { location.hash = "#"; });
+  const listEl = document.getElementById("adList");
+  const draw = () => {
+    listEl.innerHTML = items.map((r) => {
+      const img = r.image ? `<img src="${esc(imageUrl(r.image))}" alt="" loading="lazy">` : emojiFor({ main: r.main, category: r.category.name });
+      const when = new Date(r.submittedAt).toLocaleString("ru-RU", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+      return `<li class="admin-row" data-id="${esc(r.id)}">
+        <div class="recent-img admin-thumb">${img}</div>
+        <div class="admin-info">
+          <div class="admin-title">${esc(r.title)}</div>
+          <div class="admin-sub"><span class="status-badge pending">На модерации</span>
+            ${esc(r.category.name)} · ${esc(r.author ? `${r.author.displayName} (${r.author.email})` : "автор удалён")} · ${esc(when)}</div>
+        </div>
+        <div class="admin-btns">
+          <button class="act-btn" data-act="review">✏️ Поправить и опубликовать</button>
+          <button class="act-btn" data-act="approve">✅ Одобрить</button>
+          <button class="act-btn danger" data-act="reject">❌ Отклонить</button>
+        </div>
+      </li>`;
+    }).join("") || `<p class="empty">Новых предложений нет 🎉</p>`;
+    const cnt = document.querySelector('[data-tab="submissions"] .tab-count');
+    if (cnt) cnt.textContent = items.length ? ` (${items.length})` : "";
+    queueCount = items.length;
+  };
+  draw();
+  listEl.addEventListener("click", async (e) => {
+    const btn = e.target.closest("[data-act]");
+    if (!btn) return;
+    const r = items.find((x) => x.id === btn.closest(".admin-row").dataset.id);
+    if (btn.dataset.act === "review") { location.hash = "#/admin/review/" + encodeURIComponent(r.slug); return; }
+    const rejecting = btn.dataset.act === "reject";
+    let reason = null;
+    if (rejecting) {
+      reason = prompt(`Причина отказа для «${r.title}» (её увидит автор):`);
+      if (reason === null) return;
+      if (reason.trim().length < 3) { toast("⚠️ Укажите причину (от 3 символов)"); return; }
+    }
+    btn.disabled = true;
+    try {
+      if (rejecting) await endpoints.rejectSubmission(r.id, reason.trim()); else await endpoints.approveSubmission(r.id);
+      items = items.filter((x) => x !== r);
+      toast(rejecting ? "Отклонено" : "Опубликовано ✅");
+      draw();
+      if (!rejecting) refreshCatalog().catch(() => {});
     } catch (err) {
       btn.disabled = false;
-      if (err instanceof ApiError && err.details && err.details.length) {
-        msg(err.details.map((d) => `${FIELD_NAMES[d.field.split(".")[0]] || d.field}: ${d.message}`).join(" · "), "err");
-      } else {
-        msg(err instanceof NetworkError ? "Нет связи с сервером — рецепт не сохранён" : err.message, "err");
-      }
+      toast("⚠️ " + (err instanceof NetworkError ? "Нет связи с сервером" : err.message));
+      if (err instanceof ApiError && err.status === 409) renderAdmin("/submissions"); // уже рассмотрено — обновить очередь
     }
   });
+}
 
-  function msg(text, kind) {
-    const m = document.getElementById("formMsg");
-    m.hidden = !text;
-    m.textContent = text || "";
-    m.className = "form-msg" + (kind ? " " + kind : "");
-    if (text && kind === "err") m.scrollIntoView({ block: "center", behavior: "smooth" });
+async function renderReview(slug, seq) {
+  const hint = loading("Загрузка предложения…");
+  let item, cats = [];
+  try {
+    const [queue, c] = await Promise.all([endpoints.adminQueue(), endpoints.categories().catch(() => [])]);
+    item = queue.find((x) => x.slug === slug);
+    cats = c;
+  } catch (e) {
+    if (seq === renderSeq) showError(e, () => renderAdmin("/review/" + encodeURIComponent(slug)));
+    return;
+  } finally {
+    clearTimeout(hint);
   }
+  if (seq !== renderSeq) return;
+  if (!item) { toast("Предложение уже рассмотрено"); location.hash = "#/admin/submissions"; return; }
+  mountRecipeForm(els.adminView, {
+    mode: "moderate", recipe: item, cats,
+    title: "✏️ " + item.title,
+    notice: `<div class="form-msg info">Предложил(а): ${esc(item.author ? `${item.author.displayName} · ${item.author.email}` : "автор удалён")}.
+      Сохранение опубликует рецепт.</div>`,
+    backLabel: "← К предложениям", onBack: () => { location.hash = "#/admin/submissions"; },
+    saveLabel: "✅ Сохранить и опубликовать",
+    save: (input) => endpoints.updateRecipe(item.id, input),
+    onSaved: () => {
+      toast("Опубликовано ✅");
+      refreshCatalog().catch(() => {});
+      location.hash = "#/admin/submissions";
+    },
+  });
 }

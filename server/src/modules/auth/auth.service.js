@@ -2,6 +2,7 @@ const crypto = require("crypto");
 const bcrypt = require("bcrypt");
 const prisma = require("../../lib/prisma");
 const { AppError } = require("../../lib/errors");
+const env = require("../../config/env");
 const emailAuth = require("./emailAuth.service");
 const { signAccessToken, newRefreshToken, hashToken, REFRESH_TTL_MS } = require("../../lib/jwt");
 
@@ -14,7 +15,7 @@ const publicUser = (u) => ({
   email: u.email,
   displayName: u.displayName,
   role: u.role,
-  emailVerified: !!u.emailVerifiedAt,
+  emailVerified: !!u.emailVerifiedAt || !env.mailEnabled,
 });
 const emailTaken = () => new AppError(409, "EMAIL_TAKEN", "Пользователь с таким e-mail уже существует");
 
@@ -41,13 +42,16 @@ async function register({ email, password, displayName }) {
   const passwordHash = await bcrypt.hash(password, BCRYPT_COST);
   let user;
   try {
-    user = await prisma.user.create({ data: { email, passwordHash, displayName } });
+    // почта отключена → подтверждать нечем: сразу подтверждён (и останется таким, когда почта включится)
+    user = await prisma.user.create({
+      data: { email, passwordHash, displayName, emailVerifiedAt: env.mailEnabled ? null : new Date() },
+    });
   } catch (e) {
     if (e.code === "P2002") throw emailTaken();
     throw e;
   }
   // письмо с подтверждением; если почта не сработала, регистрация всё равно удалась (письмо можно запросить повторно)
-  const verificationSent = await emailAuth.sendVerificationAfterRegister(user);
+  const verificationSent = env.mailEnabled && (await emailAuth.sendVerificationAfterRegister(user));
   return { ...(await startSession(user)), verificationSent };
 }
 
