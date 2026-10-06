@@ -58,6 +58,7 @@ app.use("/api/v1/me/shopping", require("./modules/shopping/shopping.router"));
 app.use("/api/v1/me/submissions", require("./modules/submissions/submissions.router"));
 app.use("/api/v1/me/sync", limiters.sync, require("./modules/sync/sync.router"));
 app.use("/api/v1/me", require("./modules/me/me.router"));
+app.use("/api/v1/admin/push", require("./modules/push/push.router"));
 app.use("/api/v1/admin", require("./modules/admin/admin.router"));
 
 app.use(notFound);

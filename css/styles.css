@@ -872,3 +872,16 @@ a.act-btn { text-decoration: none; display: inline-flex; align-items: center; }
   .st-row { flex-wrap: wrap; }
   .st-nums { width: 100%; padding-left: 32px; }
 }
+
+/* =================== Админка: push-уведомления =================== */
+.push-box {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px;
+  background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+  padding: 10px 14px; margin: 0 0 14px; font-weight: 600; font-size: .9rem;
+}
+.push-box[hidden] { display: none; }
+.push-box .push-text { flex: 1 1 220px; min-width: 0; }
+.push-box .push-note { flex-basis: 100%; color: var(--muted); font-weight: 600; font-size: .82rem; line-height: 1.45; }
+.push-box .push-note.err { color: #a3271b; }
+:root[data-theme="dark"] .push-box .push-note.err { color: #ffb4a8; }
+.push-box .tool-btn:disabled { opacity: .55; cursor: default; }

@@ -20,6 +20,11 @@ const schema = z.object({
   MAIL_FROM_NAME: z.string().default("Рецепты"),
   // сколько рецептов пользователь может отправить на модерацию за 24 часа
   SUBMISSIONS_PER_DAY: z.coerce.number().int().min(1).default(3),
+  // Web Push для админов (npm run push:keys). Без пары ключей пуши отключены, остальное работает
+  VAPID_PUBLIC_KEY: z.string().optional(),
+  VAPID_PRIVATE_KEY: z.string().optional(),
+  // контакт издателя для push-сервисов: mailto: или https-адрес; по умолчанию — адрес сайта
+  VAPID_SUBJECT: z.string().optional(),
   MAIL_DRIVER: z.enum(["brevo", "mailjet", "log", "memory", "off"]).optional(),
 });
 
@@ -64,12 +69,33 @@ if (isProd && mailDriver !== "off" && !process.env.FRONTEND_URL) {
   process.exit(1);
 }
 
+// Web Push. Нужны оба ключа сразу; половинчатая или битая пара — ошибка конфигурации (лучше упасть при деплое,
+// чем молча не слать). В тестах отправка идёт через подменяемый sender (lib/push.js), ключи генерируются на лету.
+const { VAPID_PUBLIC_KEY: vapidPub, VAPID_PRIVATE_KEY: vapidPriv } = parsed.data;
+if (Boolean(vapidPub) !== Boolean(vapidPriv)) {
+  console.error("Ошибка конфигурации: VAPID_PUBLIC_KEY и VAPID_PRIVATE_KEY задаются только вместе");
+  process.exit(1);
+}
+// web-push принимает только https:// и mailto: — при локальном http-адресе сайта подставляем адрес боевого сайта
+const frontend = parsed.data.FRONTEND_URL.replace(/\/+$/, "");
+const vapidSubject = parsed.data.VAPID_SUBJECT || (frontend.startsWith("https://") ? frontend : "https://jessk1y.github.io/recipes");
+if (vapidPub) {
+  try {
+    require("web-push").setVapidDetails(vapidSubject, vapidPub, vapidPriv);
+  } catch (e) {
+    console.error(`Ошибка конфигурации: VAPID-ключи или VAPID_SUBJECT некорректны (${e.message})`);
+    process.exit(1);
+  }
+}
+
 module.exports = {
   ...parsed.data,
   corsOrigins: parsed.data.CORS_ORIGINS.split(",").map((s) => s.trim()).filter(Boolean),
   mailDriver,
-  // изменяемое поле: тесты временно переключают режим на настоящем app
+  // изменяемые поля: тесты временно переключают режим на настоящем app
   mailEnabled: mailDriver !== "off",
+  pushEnabled: parsed.data.NODE_ENV !== "test" && Boolean(vapidPub), // тесты включают сами: ключи из .env им не нужны
+  vapidSubject,
   frontendUrl: parsed.data.FRONTEND_URL.replace(/\/+$/, ""),
   isProd: parsed.data.NODE_ENV === "production",
 };

@@ -11,6 +11,7 @@ import { refreshCatalog } from "../sync/catalog.js";
 import { esc, toast, emojiFor } from "../lib/utils.js";
 import { mountRecipeForm } from "./recipeForm.js";
 import { statsHTML } from "./adminStats.js";
+import { pushBoxHTML, mountPushBox } from "./adminPush.js";
 
 let renderSeq = 0; // защита от устаревших ответов при быстрой смене экранов
 
@@ -61,9 +62,11 @@ function tabs(active, count) {
     <button class="tag-chip${active === "recipes" ? " active" : ""}" data-tab="recipes">Рецепты</button>
     <button class="tag-chip${active === "submissions" ? " active" : ""}" data-tab="submissions">Предложенные<span class="tab-count">${n}</span></button>
     <button class="tag-chip${active === "stats" ? " active" : ""}" data-tab="stats">📊 Статистика</button>
-  </div>`;
+  </div>
+  ${pushBoxHTML()}`;
 }
 function bindTabs() {
+  mountPushBox();
   document.querySelectorAll(".admin-tabs [data-tab]").forEach((b) => b.addEventListener("click", () => {
     location.hash = { recipes: "#/admin", submissions: "#/admin/submissions", stats: "#/admin/stats" }[b.dataset.tab];
   }));

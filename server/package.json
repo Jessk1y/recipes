@@ -12,6 +12,7 @@
     "db:seed": "node prisma/seed.js",
     "create-admin": "node scripts/create-admin.js",
     "set-password": "node scripts/set-password.js",
+    "push:keys": "node scripts/push-keys.js",
     "test": "node --test tests/",
     "db:backup": "node scripts/db-backup.js",
     "db:restore": "node scripts/db-restore.js",
@@ -36,6 +37,7 @@
     "pino-http": "^11.0.0",
     "prisma": "^6.19.3",
     "swagger-ui-express": "^5.0.1",
+    "web-push": "^3.6.7",
     "zod": "^4.6.5"
   },
   "devDependencies": {

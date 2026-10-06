@@ -46,6 +46,11 @@ export const createRecipe = (input) => api("/recipes", { auth: true, ...post(inp
 export const updateRecipe = (id, input) => api(`/recipes/${id}`, { auth: true, method: "PUT", body: input, ...slow });
 export const setRecipeStatus = (id, status) => api(`/recipes/${id}/status`, { auth: true, method: "PATCH", body: { status }, ...slow });
 export const deleteRecipe = (id) => api(`/recipes/${id}`, { auth: true, method: "DELETE", ...slow });
+// ---------- push-уведомления админа ----------
+export const pushKey = () => api("/admin/push/key", { auth: true, timeout: 20000 });
+export const pushSubscribe = (subscription) => api("/admin/push/subscription", { auth: true, method: "PUT", body: subscription, ...slow });
+export const pushUnsubscribe = (endpoint, timeout = SLOW_TIMEOUT) => api("/admin/push/subscription", { auth: true, method: "DELETE", body: { endpoint }, timeout });
+export const pushTest = (endpoint) => api("/admin/push/test", { auth: true, ...post({ endpoint }) });
 // ---------- предложения рецептов ----------
 export const mySubmissions = () => api("/me/submissions", { auth: true, ...slow });
 export const mySubmission = (id) => api(`/me/submissions/${encodeURIComponent(id)}`, { auth: true, ...slow });

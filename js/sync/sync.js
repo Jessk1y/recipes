@@ -10,6 +10,7 @@ import { SYNC_OPS, fromServer, replay } from "../core/ops.js";
 import * as endpoints from "../api/endpoints.js";
 import { ApiError, NetworkError, SessionExpired, getAuth, saveAuth, clearAuth, setAccessToken, setSessionLostHandler } from "../api/client.js";
 import { toast } from "../lib/utils.js";
+import { dropPushOnLogout } from "./push.js";
 
 const BATCH = 200;
 const FLUSH_DELAY = 1500;
@@ -173,6 +174,7 @@ export async function logout(confirmLoss) {
   try { await flush(); } catch (e) {}
   const pending = readOutbox().length;
   if (pending && !(await confirmLoss(pending))) return false;
+  await dropPushOnLogout(); // пока токен ещё действует
   const auth = getAuth();
   if (auth) { try { await endpoints.logout(auth.refreshToken); } catch (e) {} }
   clearAuth();

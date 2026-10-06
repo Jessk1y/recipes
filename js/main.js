@@ -130,6 +130,11 @@ window.addEventListener("hashchange", route);
 
 // ---------- PWA ----------
 if ("serviceWorker" in navigator) {
+  // клик по push-уведомлению, когда приложение уже открыто: service worker просит перейти на нужную страницу
+  navigator.serviceWorker.addEventListener("message", (e) => {
+    const d = e.data;
+    if (d && d.type === "push-open" && typeof d.hash === "string" && d.hash.startsWith("#/")) location.hash = d.hash;
+  });
   // когда новый service worker берёт управление — один раз перезагружаемся,
   // чтобы сразу показать свежую версию (авто-обновление).
   let swRefreshing = false;

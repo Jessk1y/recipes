@@ -523,6 +523,49 @@ const paths = {
     },
   },
 
+  // ---------- push ----------
+  "/admin/push/key": {
+    get: {
+      tags: ["Push-уведомления"],
+      ...adminOnly("Открытый ключ VAPID", "Нужен браузеру для `pushManager.subscribe`. `enabled: false` — на сервере нет ключей, пуши отключены."),
+      responses: { 200: ok("Ключ", obj({ enabled: bool, publicKey: { type: "string", nullable: true } })), 401: E[401], 403: E[403] },
+    },
+  },
+  "/admin/push/subscription": {
+    put: {
+      tags: ["Push-уведомления"],
+      ...adminOnly(
+        "Подписать этот браузер",
+        "Повторный вызов с тем же `endpoint` обновляет ключи и передаёт подписку текущему админу. Не больше 10 подписок на админа (старые вытесняются). Принимаются только https-адреса push-сервисов (не localhost/IP)."
+      ),
+      requestBody: body(ref("PushSubscription")),
+      responses: { 204: noContent("Подписка сохранена"), 401: E[401], 403: E[403], 422: E[422], 503: err("Нет VAPID-ключей (`PUSH_DISABLED`)") },
+    },
+    delete: {
+      tags: ["Push-уведомления"],
+      ...adminOnly("Отписать этот браузер", "Удаляет только подписки текущего админа; повторный вызов безвреден."),
+      requestBody: body(obj({ endpoint: str() }, ["endpoint"])),
+      responses: { 204: noContent("Подписки нет (или удалена)"), 401: E[401], 403: E[403], 422: E[422] },
+    },
+  },
+  "/admin/push/test": {
+    post: {
+      tags: ["Push-уведомления"],
+      ...adminOnly("Тестовое уведомление", "Отправляет пробный пуш на подписку этого устройства и ждёт ответа push-сервиса."),
+      requestBody: body(obj({ endpoint: str() }, ["endpoint"])),
+      responses: {
+        200: ok("Отправлено", obj({ sent: bool })),
+        401: E[401],
+        403: E[403],
+        404: E[404],
+        410: err("Подписка устарела и удалена (`SUBSCRIPTION_GONE`)"),
+        422: E[422],
+        502: err("Push-сервис не принял уведомление (`PUSH_FAILED`)"),
+        503: err("Нет VAPID-ключей (`PUSH_DISABLED`)"),
+      },
+    },
+  },
+
   // ---------- admin ----------
   "/admin/users": {
     get: {
@@ -613,6 +656,10 @@ const schemas = {
     weeks: arr(obj({ week: str({ format: "date", description: "понедельник недели (UTC)" }), views: int, newUsers: int, submissions: int })),
     recipes: arr(obj({ slug: str(), title: str(), views: int, views7d: int, favorites: int, cart: int })),
   }),
+  PushSubscription: obj(
+    { endpoint: str({ format: "uri", description: "https-адрес push-сервиса браузера" }), keys: obj({ p256dh: str(), auth: str() }, ["p256dh", "auth"]) },
+    ["endpoint", "keys"]
+  ),
   AdminUser: obj({ id: uuid, email: str({ format: "email" }), displayName: str(), role: roleEnum, isBlocked: bool, createdAt: dateTime }),
   Tokens: obj({ accessToken: str({ description: "JWT на 15 минут" }), refreshToken: str({ description: "Одноразовый, 30 дней" }) }),
   Session: obj({
@@ -766,6 +813,7 @@ module.exports = {
     { name: "Синхронизация" },
     { name: "Администрирование" },
     { name: "Статистика" },
+    { name: "Push-уведомления" },
   ],
   paths,
   components: {

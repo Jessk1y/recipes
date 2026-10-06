@@ -1,13 +1,13 @@
 // Service worker — офлайн-кэш для PWA «Мои рецепты»
-const CACHE = "recipes-v20";
+const CACHE = "recipes-v21";
 const IMG_CACHE = "recipes-img-v1"; // фото рецептов — переживают смену версии
 // ES-модули импортируются без ?v, поэтому при смене версии все файлы скачиваются заново
 // мимо HTTP-кэша (cache: "reload"). Новый модуль в js/ — добавить сюда.
 const ASSETS = [
   "./",
   "index.html",
-  "css/styles.css?v=20",
-  "js/main.js?v=20",
+  "css/styles.css?v=21",
+  "js/main.js?v=21",
   "js/config.js",
   "js/core/storage.js",
   "js/core/serverConfig.js",
@@ -19,6 +19,7 @@ const ASSETS = [
   "js/sync/catalog.js",
   "js/sync/sync.js",
   "js/sync/views.js",
+  "js/sync/push.js",
   "js/lib/utils.js",
   "js/lib/qty.js",
   "js/lib/products.js",
@@ -33,6 +34,7 @@ const ASSETS = [
   "js/views/account.js",
   "js/views/admin.js",
   "js/views/adminStats.js",
+  "js/views/adminPush.js",
   "js/views/recipeForm.js",
   "js/views/submissions.js",
   "data/recipes.json",
@@ -57,13 +59,36 @@ self.addEventListener("activate", (e) => {
   );
 });
 
-// Клик по уведомлению таймера — открыть/сфокусировать приложение
+// Web Push (админу — о новом предложении рецепта). Сервер шлёт JSON { title, body, hash, tag }.
+// iOS/Safari требуют показать уведомление на каждый push, поэтому showNotification вызывается всегда.
+self.addEventListener("push", (e) => {
+  let d = {};
+  try { d = e.data ? e.data.json() : {}; } catch (err) { d = { body: e.data ? e.data.text() : "" }; }
+  e.waitUntil(
+    self.registration.showNotification(d.title || "Рецепты", {
+      body: d.body || "",
+      icon: "icons/icon-192.png",
+      badge: "icons/icon-192.png",
+      tag: d.tag || undefined,
+      data: { hash: typeof d.hash === "string" && d.hash.startsWith("#/") ? d.hash : "" },
+    })
+  );
+});
+
+// Клик по уведомлению — открыть/сфокусировать приложение; у пуша есть data.hash — перейти на эту страницу
+// (у уведомлений таймера data нет — просто фокус)
 self.addEventListener("notificationclick", (e) => {
   e.notification.close();
+  const hash = (e.notification.data && e.notification.data.hash) || "";
   e.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
-      for (const c of list) { if ("focus" in c) return c.focus(); }
-      if (self.clients.openWindow) return self.clients.openWindow("./");
+      for (const c of list) {
+        if ("focus" in c) {
+          // страница сама меняет location.hash (main.js, сообщение push-open) — client.navigate на iOS ненадёжен
+          return c.focus().then(() => { if (hash) c.postMessage({ type: "push-open", hash }); });
+        }
+      }
+      if (self.clients.openWindow) return self.clients.openWindow("./" + hash);
     })
   );
 });

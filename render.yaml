@@ -37,3 +37,8 @@ services:
         sync: false
       - key: MAIL_FROM_EMAIL
         sync: false
+      # Web Push для админа (npm run push:keys); необязательны: без них уведомления отключены
+      - key: VAPID_PUBLIC_KEY
+        sync: false
+      - key: VAPID_PRIVATE_KEY
+        sync: false

@@ -6,6 +6,7 @@ const env = require("../../config/env");
 const { AppError } = require("../../lib/errors");
 const { slugify } = require("../../lib/slug");
 const recipes = require("../recipes/recipes.service");
+const push = require("../../lib/push");
 
 const DAY = 24 * 60 * 60 * 1000;
 const EDITABLE = ["PENDING", "REJECTED"];
@@ -16,6 +17,19 @@ const view = (r) => ({
   rejectReason: r.status === "REJECTED" ? r.rejectReason : null,
   reviewedAt: r.reviewedAt,
 });
+
+// Пуш всем админам с подпиской: в очереди появилась новая отправка (в фоне — автор не ждёт push-сервисы)
+function announce(userId, r, resubmitted) {
+  push.background(async () => {
+    const author = await prisma.user.findUnique({ where: { id: userId }, select: { displayName: true } });
+    await push.notifyAdmins({
+      title: resubmitted ? "Исправленное предложение рецепта" : "Новое предложение рецепта",
+      body: `«${r.title}»${author ? ` — ${author.displayName}` : ""}`,
+      hash: "#/admin/submissions",
+      tag: `submission-${r.id}`,
+    });
+  });
+}
 
 // ---------- автор ----------
 
@@ -70,7 +84,9 @@ async function create(userId, input) {
     },
     data: { submittedAt: new Date(), rejectReason: null },
   });
-  return getMine(userId, out.id);
+  const r = await getMine(userId, out.id);
+  announce(userId, r, false);
+  return r;
 }
 
 async function update(userId, id, input) {
@@ -92,7 +108,9 @@ async function update(userId, id, input) {
     },
     data,
   });
-  return getMine(userId, out.id);
+  const r = await getMine(userId, out.id);
+  if (data.submittedAt) announce(userId, r, true); // правка отклонённого = новая отправка на модерацию; правка ожидающего — тишина
+  return r;
 }
 
 // ---------- админ ----------

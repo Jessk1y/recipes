@@ -42,6 +42,7 @@ model User {
   favorites     Favorite[]
   notes         Note[]
   shoppingItems ShoppingItem[]
+  pushSubscriptions PushSubscription[]
 
   @@map("users")
 }
@@ -243,4 +244,21 @@ model ShoppingContrib {
   @@index([itemId])
   @@index([recipeId])
   @@map("shopping_contribs")
+}
+
+// Web Push: подписки браузеров администраторов (уведомление о новом предложении рецепта).
+// Подписка принадлежит браузеру, а не человеку: endpoint уникален, при входе другого админа переходит к нему.
+// Мёртвые подписки (провайдер ответил 404/410) удаляются при отправке.
+model PushSubscription {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("push_subscriptions")
 }

@@ -47,6 +47,10 @@ async function mutate(id, change, { revokeSessions = false } = {}) {
     if (Object.keys(change).every((k) => target[k] === change[k])) return target; // нечего менять
 
     const updated = await tx.user.update({ where: { id }, data: change, select });
+    if (!isActiveAdmin(updated)) {
+      // разжалованный или заблокированный перестаёт получать пуши админа
+      await tx.pushSubscription.deleteMany({ where: { userId: id } });
+    }
     if (revokeSessions) {
       // заблокированный теряет все refresh-токены сразу, не дожидаясь их истечения
       await tx.refreshToken.updateMany({ where: { userId: id, revokedAt: null }, data: { revokedAt: new Date() } });
