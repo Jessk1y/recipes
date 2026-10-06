@@ -1,0 +1,79 @@
+# CI: тесты сервера на настоящей PostgreSQL + проверка синтаксиса фронтенда.
+# Секреты не нужны — все значения ниже тестовые. Render деплоит API только после зелёных проверок
+# (autoDeployTrigger: checksPass в render.yaml), поэтому НЕ добавляйте сюда paths/branches-фильтры:
+# если на коммите нет ни одной проверки, Render не запустит деплой вовсе.
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  server:
+    name: Server tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: recipes
+          POSTGRES_PASSWORD: recipes
+          POSTGRES_DB: recipes
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U recipes -d recipes"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://recipes:recipes@localhost:5432/recipes?schema=public
+      JWT_SECRET: ci-only-jwt-secret-0123456789abcdef0123456789abcdef
+      STORAGE_DRIVER: local
+      FRONTEND_URL: http://localhost:8000
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - run: npm ci
+      - run: npx prisma generate
+      - name: Apply migrations
+        run: npx prisma migrate deploy
+      - name: Tests
+        run: npm test
+
+  frontend:
+    name: Frontend syntax
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Check js/ ES modules and sw.js
+        run: |
+          status=0
+          while IFS= read -r f; do
+            if ! node --input-type=module --check < "$f"; then
+              echo "::error file=$f::syntax error"
+              status=1
+            fi
+          done < <(find js -name '*.js' | sort)
+          node --check sw.js || { echo "::error file=sw.js::syntax error"; status=1; }
+          exit $status

@@ -10,7 +10,7 @@ services:
     buildCommand: npm ci && npx prisma generate && npx prisma migrate deploy
     startCommand: npm start
     healthCheckPath: /api/v1/health
-    autoDeploy: true
+    autoDeployTrigger: checksPass # деплой только после зелёного CI (.github/workflows/ci.yml)
     envVars:
       - key: NODE_VERSION
         value: "20"
