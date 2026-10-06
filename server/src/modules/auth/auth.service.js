@@ -4,6 +4,8 @@ const prisma = require("../../lib/prisma");
 const { AppError } = require("../../lib/errors");
 const env = require("../../config/env");
 const emailAuth = require("./emailAuth.service");
+const emailCheck = require("../../lib/emailCheck");
+const { suggestDomain } = require("../../lib/emailTypos");
 const { signAccessToken, newRefreshToken, hashToken, REFRESH_TTL_MS } = require("../../lib/jwt");
 
 const BCRYPT_COST = 12;
@@ -37,8 +39,21 @@ async function startSession(user) {
   return { user: publicUser(user), accessToken: signAccessToken(user), refreshToken };
 }
 
+// Одноразовый домен или домен без приёма почты — отказ; при сбое DNS пропускаем (не блокируем из-за чужой инфраструктуры)
+async function assertDeliverable(email) {
+  const domain = emailCheck.domainOf(email);
+  if (emailCheck.isDisposable(domain))
+    throw new AppError(422, "EMAIL_DISPOSABLE", "Одноразовые e-mail не принимаются — укажите постоянный адрес");
+  const typo = suggestDomain(domain);
+  if (typo)
+    throw new AppError(422, "EMAIL_TYPO", `Возможно, вы имели в виду ${email.slice(0, email.lastIndexOf("@") + 1)}${typo}?`);
+  if ((await emailCheck.mailVerdict(domain)) === "no-mail")
+    throw new AppError(422, "EMAIL_DOMAIN_INVALID", `Домен «${domain}» не существует или не принимает почту — проверьте адрес`);
+}
+
 async function register({ email, password, displayName }) {
   if (await prisma.user.findUnique({ where: { email } })) throw emailTaken();
+  await assertDeliverable(email);
   const passwordHash = await bcrypt.hash(password, BCRYPT_COST);
   let user;
   try {

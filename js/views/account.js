@@ -8,6 +8,7 @@ import * as sync from "../sync/sync.js";
 import * as endpoints from "../api/endpoints.js";
 import { ApiError, NetworkError } from "../api/client.js";
 import { esc, plural, toast } from "../lib/utils.js";
+import { suggestEmail, isAsciiEmail } from "../lib/emailTypos.js";
 
 let mode = "login"; // login | register | forgot
 let flash = "";     // одноразовое сообщение над формой (например, «пароль изменён»)
@@ -70,6 +71,7 @@ export function renderAccount() {
       <form id="authForm" class="form" novalidate>
         ${reg ? `<label class="field">Имя<input name="displayName" class="ct-input" autocomplete="nickname" maxlength="50" required></label>` : ""}
         <label class="field">E-mail<input name="email" type="email" class="ct-input" autocomplete="email" required></label>
+        ${reg ? `<div id="emailHint" class="form-msg info" hidden></div>` : ""}
         <label class="field">Пароль${reg ? ' <span class="hint">(не меньше 8 символов)</span>' : ""}
           <input name="password" type="password" class="ct-input" minlength="${reg ? 8 : 1}" maxlength="72"
             autocomplete="${reg ? "new-password" : "current-password"}" required></label>
@@ -88,6 +90,26 @@ export function renderAccount() {
   const forgot = document.getElementById("toForgot");
   if (forgot) forgot.addEventListener("click", () => { mode = "forgot"; renderAccount(); });
   document.getElementById("authForm").addEventListener("submit", onSubmit);
+  if (reg) setupEmailHint(document.getElementById("authForm").email);
+}
+
+// Регистрация: после ввода адреса предлагаем исправить очевидную опечатку в домене («gmial.com → gmail.com?»)
+function setupEmailHint(input) {
+  const hint = document.getElementById("emailHint");
+  const update = () => {
+    const fixed = suggestEmail(input.value.trim());
+    hint.hidden = !fixed;
+    if (!fixed) return;
+    hint.textContent = "Возможно, вы имели в виду ";
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "link-btn";
+    b.textContent = fixed;
+    b.addEventListener("click", () => { input.value = fixed; hint.hidden = true; input.focus(); });
+    hint.append(b, "?");
+  };
+  input.addEventListener("blur", update);
+  input.addEventListener("input", () => { hint.hidden = true; });
 }
 
 // «Забыли пароль?»: ответ сервера всегда одинаков, поэтому и текст одинаков
@@ -150,6 +172,7 @@ async function onSubmit(e) {
   const name = f.displayName ? f.displayName.value.trim() : "";
   const confirm = f.confirmPassword ? f.confirmPassword.value : "";
   if (!email || !password || (mode === "register" && (!name || !confirm))) return showMsg("Заполните все поля", "err");
+  if (mode === "register" && !isAsciiEmail(email)) return showMsg("E-mail — только латинские буквы, цифры и обычные символы (без кириллицы и пробелов)", "err");
   if (mode === "register" && password.length < 8) return showMsg("Пароль — не меньше 8 символов", "err");
   if (mode === "register" && password !== confirm) return showMsg("Пароли не совпадают", "err");
 

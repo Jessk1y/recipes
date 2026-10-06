@@ -63,7 +63,7 @@ const paths = {
       description:
         "Создаёт пользователя с ролью USER, открывает сессию и отправляет письмо со ссылкой подтверждения e-mail (если почта недоступна, регистрация всё равно проходит — `verificationSent: false`, письмо можно запросить повторно). Пароль нужно ввести дважды (`confirmPassword`). Неподтверждённые аккаунты старше 7 дней удаляются. Лимит: 30 запросов за 15 минут на весь `/auth`.",
       requestBody: body(ref("RegisterInput")),
-      responses: { 201: ok("Пользователь создан", ref("Session")), 409: err("E-mail занят (`EMAIL_TAKEN`)"), 422: E[422], 429: E[429] },
+      responses: { 201: ok("Пользователь создан", ref("Session")), 409: err("E-mail занят (`EMAIL_TAKEN`)"), 422: err("Ошибка валидации (`VALIDATION_ERROR`, в т.ч. не-ASCII e-mail), одноразовый домен (`EMAIL_DISPOSABLE`) опечатка в популярном домене (`EMAIL_TYPO`) или домен без приёма почты (`EMAIL_DOMAIN_INVALID`, в т.ч. MX в «чёрную дыру»)"), 429: E[429] },
     },
   },
   "/auth/login": {
