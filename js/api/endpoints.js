@@ -24,6 +24,9 @@ export const serverConfig = () => raw("/config", { timeout: 10000 });
 // cache: "no-cache" — браузер сам отправит If-None-Match и при неизменном каталоге получит короткий 304
 export const snapshot = () => raw("/catalog/snapshot", { cache: "no-cache", ...slow });
 
+// счётчик просмотров: публичный, без токена и без тела ответа (см. sync/views.js)
+export const trackView = (slug) => raw("/stats/view", { method: "POST", body: { slug }, timeout: 10000 });
+
 // ---------- личные данные ----------
 export const sync = (ops) => api("/me/sync", { auth: true, ...post({ ops }) });
 
@@ -36,6 +39,7 @@ export async function adminRecipes() {
     if (all.length >= r.total || !r.items.length) return all;
   }
 }
+export const adminStats = (weeks = 12) => api(`/admin/stats?weeks=${weeks}`, { auth: true, ...slow });
 export const adminRecipe = (slug) => api(`/recipes/${encodeURIComponent(slug)}`, { auth: true, ...slow });
 export const categories = () => raw("/categories", slow);
 export const createRecipe = (input) => api("/recipes", { auth: true, ...post(input) });

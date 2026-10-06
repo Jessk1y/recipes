@@ -500,6 +500,29 @@ const paths = {
     },
   },
 
+  // ---------- статистика ----------
+  "/stats/view": {
+    post: {
+      tags: ["Статистика"],
+      summary: "Засчитать просмотр рецепта",
+      description:
+        "Лёгкий публичный запрос, который фронтенд шлёт при открытии рецепта — не чаще раза в сутки с устройства (это следит клиент: сервер устройств не различает). Хранится только счётчик на пару (рецепт, день UTC): ни IP, ни пользователя, ни устройства. Неизвестный и неопубликованный slug молча игнорируется (тот же 204). Лимит: 60 запросов за 15 минут с одного IP.",
+      requestBody: body(obj({ slug: str() }, ["slug"])),
+      responses: { 204: noContent("Принято"), 422: E[422], 429: E[429] },
+    },
+  },
+  "/admin/stats": {
+    get: {
+      tags: ["Статистика"],
+      ...adminOnly(
+        "Сводка статистики",
+        "Просмотры, избранное и корзина по опубликованным рецептам (избранное и корзина — сколько пользователей держат рецепт сейчас), новые пользователи и предложения по неделям (недели с понедельника, UTC; последняя — текущая, неполная)."
+      ),
+      parameters: [param("weeks", "query", { type: "integer", minimum: 1, maximum: 52, default: 12 }, "Сколько недель в графиках")],
+      responses: { 200: ok("Статистика", ref("Stats")), 401: E[401], 403: E[403], 422: E[422] },
+    },
+  },
+
   // ---------- admin ----------
   "/admin/users": {
     get: {
@@ -581,6 +604,15 @@ const schemas = {
     ["error"]
   ),
   PublicUser: obj({ id: uuid, email: str({ format: "email" }), displayName: str(), role: roleEnum, emailVerified: bool }),
+  Stats: obj({
+    generatedAt: dateTime,
+    summary: obj({
+      views: int, views7d: int, favorites: int, cart: int, users: int, newUsers7d: int,
+      publishedRecipes: int, submissions: int, pendingSubmissions: int,
+    }),
+    weeks: arr(obj({ week: str({ format: "date", description: "понедельник недели (UTC)" }), views: int, newUsers: int, submissions: int })),
+    recipes: arr(obj({ slug: str(), title: str(), views: int, views7d: int, favorites: int, cart: int })),
+  }),
   AdminUser: obj({ id: uuid, email: str({ format: "email" }), displayName: str(), role: roleEnum, isBlocked: bool, createdAt: dateTime }),
   Tokens: obj({ accessToken: str({ description: "JWT на 15 минут" }), refreshToken: str({ description: "Одноразовый, 30 дней" }) }),
   Session: obj({
@@ -733,6 +765,7 @@ module.exports = {
     { name: "Список покупок" },
     { name: "Синхронизация" },
     { name: "Администрирование" },
+    { name: "Статистика" },
   ],
   paths,
   components: {

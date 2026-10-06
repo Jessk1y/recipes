@@ -7,6 +7,7 @@ import { bindTimers, addCustomTimer, startCustomTimer } from "./timers.js";
 import { requestWake } from "./wake.js";
 import { toggleFav } from "./list.js";
 import { addToShopping } from "./shopping.js";
+import { trackView } from "../sync/views.js";
 
 // ---------- Рендер карточки рецепта ----------
 function ingredientsHTML(r, factor) {
@@ -39,6 +40,7 @@ function renderDetail(id) {
   state.current = r;
   state.factor = 1;
   actions.pushRecent(id);
+  trackView(id);
 
   const img = r.image ? `<img src="${esc(r.image)}" alt="${esc(r.title)}">` : emojiFor(r);
   const meta = [r.time, r.servings].filter(Boolean).map((m) => `<span>${esc(m)}</span>`).join("");

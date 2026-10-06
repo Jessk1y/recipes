@@ -1,5 +1,6 @@
 // Админ-панель рецептов: #/admin (список, включая черновики), #/admin/new, #/admin/edit/<slug>,
-// #/admin/submissions (предложения пользователей) и #/admin/review/<slug> (поправить и опубликовать).
+// #/admin/submissions (предложения пользователей), #/admin/review/<slug> (поправить и опубликовать)
+// и #/admin/stats (статистика).
 // Работает только онлайн (без outbox); права проверяет сервер — здесь только скрываем лишнее.
 import { WAKE_HINT_AFTER } from "../config.js";
 import { els } from "./ui.js";
@@ -9,6 +10,7 @@ import { ApiError, NetworkError, imageUrl } from "../api/client.js";
 import { refreshCatalog } from "../sync/catalog.js";
 import { esc, toast, emojiFor } from "../lib/utils.js";
 import { mountRecipeForm } from "./recipeForm.js";
+import { statsHTML } from "./adminStats.js";
 
 let renderSeq = 0; // защита от устаревших ответов при быстрой смене экранов
 
@@ -27,6 +29,7 @@ export function renderAdmin(path) {
   else if (m) renderForm(decodeURIComponent(m[1]), seq);
   else if (rv) renderReview(decodeURIComponent(rv[1]), seq);
   else if (path === "/submissions") renderQueue(seq);
+  else if (path === "/stats") renderStats(seq);
   else renderList(seq);
 }
 
@@ -57,12 +60,44 @@ function tabs(active, count) {
   return `<div class="auth-tabs admin-tabs">
     <button class="tag-chip${active === "recipes" ? " active" : ""}" data-tab="recipes">Рецепты</button>
     <button class="tag-chip${active === "submissions" ? " active" : ""}" data-tab="submissions">Предложенные<span class="tab-count">${n}</span></button>
+    <button class="tag-chip${active === "stats" ? " active" : ""}" data-tab="stats">📊 Статистика</button>
   </div>`;
 }
 function bindTabs() {
   document.querySelectorAll(".admin-tabs [data-tab]").forEach((b) => b.addEventListener("click", () => {
-    location.hash = b.dataset.tab === "recipes" ? "#/admin" : "#/admin/submissions";
+    location.hash = { recipes: "#/admin", submissions: "#/admin/submissions", stats: "#/admin/stats" }[b.dataset.tab];
   }));
+}
+
+// ---------- Статистика ----------
+let statsWeeks = 12, statsSort = "views";
+async function renderStats(seq) {
+  const hint = loading("Загрузка статистики…");
+  let data;
+  try {
+    data = await endpoints.adminStats(statsWeeks);
+  } catch (e) {
+    if (seq === renderSeq) showError(e, () => renderAdmin("/stats"));
+    return;
+  } finally {
+    clearTimeout(hint);
+  }
+  if (seq !== renderSeq) return;
+  els.adminView.innerHTML = `
+    <div class="detail-top"><button class="back-btn" id="adBack">← К сайту</button></div>
+    <h1 class="detail-title">🛠 Рецепты</h1>
+    ${tabs("stats")}
+    <div id="stBody"></div>`;
+  bindTabs();
+  document.getElementById("adBack").addEventListener("click", () => { location.hash = "#"; });
+  const body = document.getElementById("stBody");
+  body.innerHTML = statsHTML(data, { sort: statsSort, weeks: statsWeeks });
+  body.addEventListener("click", (e) => {
+    const w = e.target.closest("[data-weeks]");
+    if (w) { statsWeeks = Number(w.dataset.weeks); renderStats(++renderSeq); return; }
+    const s = e.target.closest("[data-sort]");
+    if (s) { statsSort = s.dataset.sort; body.innerHTML = statsHTML(data, { sort: statsSort, weeks: statsWeeks }); }
+  });
 }
 
 // ---------- Список ----------

@@ -127,11 +127,25 @@ model Recipe {
   favorites   Favorite[]
   notes       Note[]
   contribs    ShoppingContrib[]
+  views       RecipeView[]
 
   @@index([status, createdAt])
   @@index([authorId, submittedAt])
   @@index([timeMinutes])
   @@map("recipes")
+}
+
+// Просмотры рецептов: только счётчик на (рецепт, день UTC) — ни IP, ни пользователя, ни устройства (lib/stats)
+model RecipeView {
+  recipeId String   @map("recipe_id") @db.Uuid
+  day      DateTime @db.Date
+  count    Int      @default(0)
+
+  recipe Recipe @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+
+  @@id([recipeId, day])
+  @@index([day])
+  @@map("recipe_views")
 }
 
 model RecipeTag {

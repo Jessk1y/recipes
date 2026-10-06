@@ -51,8 +51,8 @@ test("админские операции помечены security и 403", () 
       if (item[m].description?.startsWith("**Только администратор.**")) adminOps.push([m, p, item[m]]);
     }
   }
-  // 4 записи рецептов + 3 метода admin/users + 3 метода admin/submissions (загрузка фото — не только админам)
-  assert.equal(adminOps.length, 10, `админских операций: ${adminOps.length}`);
+  // 4 записи рецептов + 3 метода admin/users + 3 метода admin/submissions + admin/stats (загрузка фото — не только админам)
+  assert.equal(adminOps.length, 11, `админских операций: ${adminOps.length}`);
   for (const [m, p, op] of adminOps) {
     assert.ok(op.security, `${m} ${p}: security`);
     assert.ok(op.responses[403], `${m} ${p}: 403`);
@@ -70,6 +70,7 @@ test("спецификация совпадает с реальными марш
     shopping: "/me/shopping",
     sync: "/me/sync",
     submissions: "/me/submissions",
+    stats: "/stats",
     me: "/me",
     admin: "/admin",
   };

@@ -6,6 +6,9 @@ const c = require("./admin.controller");
 const subSchemas = require("../submissions/submissions.schemas");
 const sub = require("../submissions/submissions.controller");
 
+const statsSchemas = require("../stats/stats.schemas");
+const stats = require("../stats/stats.controller");
+
 const router = Router();
 router.use(requireAuth, requireActiveAdmin); // всё под /admin — только для действующего администратора
 
@@ -17,5 +20,8 @@ router.patch("/users/:id/block", validate.params(schemas.userId), validate(schem
 router.get("/submissions", validate.query(subSchemas.queueQuery), sub.queue);
 router.post("/submissions/:id/approve", sub.approve);
 router.post("/submissions/:id/reject", validate(subSchemas.rejectInput), sub.reject);
+
+// статистика: просмотры, избранное, корзина, новые пользователи и предложения по неделям
+router.get("/stats", validate.query(statsSchemas.overviewQuery), stats.overview);
 
 module.exports = router;

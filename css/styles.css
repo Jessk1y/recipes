@@ -839,3 +839,36 @@ a.act-btn { text-decoration: none; display: inline-flex; align-items: center; }
 .reject-reason { margin-top: 4px; font-size: .88rem; color: #b03a2e; }
 :root[data-theme="dark"] .reject-reason { color: #f1a79e; }
 .admin-tabs { margin: 0 0 14px; }
+
+/* =================== Админка: статистика =================== */
+.st-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 14px; }
+.st-card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; }
+.st-card-v { font-size: 1.7rem; font-weight: 800; color: var(--accent); line-height: 1.1; }
+.st-card-l { font-weight: 700; margin-top: 2px; }
+.st-card-s { color: var(--muted); font-size: .82rem; margin-top: 2px; }
+.st-period { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 4px 0 10px; }
+.st-charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
+.st-chart { margin: 0; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 12px 12px 6px; }
+.st-chart figcaption { font-weight: 800; margin-bottom: 4px; }
+.st-sum { font-weight: 600; color: var(--muted); font-size: .82rem; margin-left: 4px; }
+.st-svg { width: 100%; height: auto; display: block; }
+.st-grid { stroke: var(--line); stroke-width: 1; }
+.st-t { fill: var(--muted); font-size: 10.5px; }
+.st-v { fill: var(--ink); font-size: 10.5px; font-weight: 700; }
+.st-note { margin: 10px 2px 14px; }
+.st-sorts { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.st-list { list-style: none; margin: 0; padding: 0; }
+.st-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); }
+.st-row:first-child { border-top: 0; }
+.st-rank { width: 22px; text-align: center; font-weight: 800; color: var(--muted); flex: none; }
+.st-name { flex: 1; min-width: 0; }
+.st-name a { color: var(--ink); font-weight: 700; text-decoration: none; }
+.st-name a:hover { color: var(--accent); }
+.st-bar { height: 5px; border-radius: 3px; background: var(--accent-soft); margin-top: 5px; overflow: hidden; }
+.st-bar span { display: block; height: 100%; background: var(--accent); border-radius: 3px; }
+.st-nums { display: flex; gap: 10px; flex: none; color: var(--muted); font-size: .86rem; white-space: nowrap; }
+.st-nums .on { color: var(--accent); font-weight: 800; }
+@media (max-width: 520px) {
+  .st-row { flex-wrap: wrap; }
+  .st-nums { width: 100%; padding-left: 32px; }
+}

@@ -51,6 +51,7 @@ app.use("/api/v1/auth", require("./modules/auth/auth.router"));
 app.use("/api/v1/recipes", require("./modules/recipes/recipes.router"));
 app.get("/api/v1/catalog/snapshot", require("./modules/recipes/recipes.controller").snapshot);
 app.use("/api/v1", require("./modules/taxonomy/taxonomy.router"));
+app.use("/api/v1/stats", require("./modules/stats/stats.router"));
 app.use("/api/v1/uploads", require("./modules/media/media.router"));
 // личные данные (только для вошедшего): более конкретные пути подключаются раньше /me
 app.use("/api/v1/me/shopping", require("./modules/shopping/shopping.router"));
