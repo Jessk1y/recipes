@@ -33,12 +33,12 @@ export function stepSeconds(text) {
 
 // Масштабирование количеств в строке ингредиента
 const SCALE_UNIT = "(?:кг|г|мл|л|шт|ст\\.?\\s*л\\.?|ч\\.?\\s*л\\.?|стакан\\w*|зубчик\\w*|плитк\\w*|банк\\w*|кружк\\w*|пачк\\w*|дольк\\w*|щепот\\w*|горст\\w*|ломтик\\w*|порц\\w*)";
-function fmtNum(n) {
+export function fmtNum(n) {
   n = Math.round(n * 100) / 100;
   let s = Number.isInteger(n) ? String(n) : n.toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
   return s.replace(".", ",");
 }
-function numOf(tok) {
+export function numOf(tok) {
   if (tok.indexOf("/") >= 0) { const [a, b] = tok.split("/"); return (+a) / (+b); }
   return parseFloat(tok.replace(",", "."));
 }

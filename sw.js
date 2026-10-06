@@ -1,13 +1,13 @@
 // Service worker — офлайн-кэш для PWA «Мои рецепты»
-const CACHE = "recipes-v18";
+const CACHE = "recipes-v19";
 const IMG_CACHE = "recipes-img-v1"; // фото рецептов — переживают смену версии
 // ES-модули импортируются без ?v, поэтому при смене версии все файлы скачиваются заново
 // мимо HTTP-кэша (cache: "reload"). Новый модуль в js/ — добавить сюда.
 const ASSETS = [
   "./",
   "index.html",
-  "css/styles.css?v=18",
-  "js/main.js?v=18",
+  "css/styles.css?v=19",
+  "js/main.js?v=19",
   "js/config.js",
   "js/core/storage.js",
   "js/core/serverConfig.js",
@@ -19,6 +19,8 @@ const ASSETS = [
   "js/sync/catalog.js",
   "js/sync/sync.js",
   "js/lib/utils.js",
+  "js/lib/qty.js",
+  "js/lib/products.js",
   "js/views/ui.js",
   "js/views/list.js",
   "js/views/detail.js",

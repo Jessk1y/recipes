@@ -4,13 +4,41 @@ import { state, els } from "./ui.js";
 import { getData } from "../core/store.js";
 import * as actions from "../core/actions.js";
 import { esc, toast } from "../lib/utils.js";
+import { productInfo } from "../lib/products.js";
+import { sumAmounts } from "../lib/qty.js";
 
-function shoppingAmount(it) {
-  const seen = [];
-  (it.contribs || []).forEach((c) => { if (c.a && !seen.includes(c.a)) seen.push(c.a); });
-  return seen.join(" + ");
+// Хранение не меняется: каждая запись — отдельное название со своими contribs.
+// Сложение — только при показе: записи с одним productInfo().key («яйцо» / «яйца куриные») идут одной строкой.
+function groupedItems() {
+  const map = new Map();
+  getData().shopping.forEach((it) => {
+    const info = productInfo(it.name);
+    let g = map.get(info.key);
+    if (!g) { g = { name: it.name, info, items: [] }; map.set(info.key, g); }
+    g.items.push(it);
+  });
+  return [...map.values()];
 }
-function shoppingText(it) { const a = shoppingAmount(it); return a ? it.name + " — " + a : it.name; }
+function groupTotal(g) {
+  const amounts = g.items.flatMap((it) => (it.contribs || []).map((c) => c.a).filter(Boolean));
+  return sumAmounts(amounts, g.info).text;
+}
+function shoppingText(g) { const a = groupTotal(g); return a ? g.name + " — " + a : g.name; }
+// «Блины 200 г · Пирог 1 стакан» — только если продукт нужен минимум двум блюдам
+function groupByDish(g) {
+  const per = new Map();
+  g.items.forEach((it) => (it.contribs || []).forEach((c) => {
+    if (!c.r) return;
+    if (!per.has(c.r)) per.set(c.r, []);
+    if (c.a) per.get(c.r).push(c.a);
+  }));
+  if (per.size < 2) return "";
+  return [...per].map(([id, amounts]) => {
+    const r = state.recipes.find((x) => x.id === id);
+    const t = sumAmounts(amounts, g.info).text;
+    return (r ? r.title : id) + (t ? " " + t : "");
+  }).join(" · ");
+}
 function dishesInCart() {
   const ids = [];
   getData().shopping.forEach((it) => (it.contribs || []).forEach((c) => { if (c.r && !ids.includes(c.r)) ids.push(c.r); }));
@@ -37,7 +65,7 @@ function updateShoppingBadge() {
   els.shoppingBadge.textContent = n;
 }
 function renderShopping() {
-  const items = getData().shopping;
+  const items = groupedItems();
   const dishIds = dishesInCart();
   const chips = dishIds.map((id) => {
     const r = state.recipes.find((x) => x.id === id);
@@ -56,8 +84,10 @@ function renderShopping() {
     <h1 class="detail-title">🛒 Список покупок</h1>
     ${dishBar}
     ${items.length
-      ? `<ul class="ingredients-list shopping-list">${items.map((it, i) =>
-          `<li class="check-item${it.checked ? " checked" : ""}" data-sh="${i}"><span class="cbox"></span><span class="ctext">${esc(shoppingText(it))}</span><button class="sh-del" data-del="${i}" title="Удалить">✕</button></li>`).join("")}</ul>`
+      ? `<ul class="ingredients-list shopping-list">${items.map((g, i) => {
+          const src = groupByDish(g);
+          return `<li class="check-item${g.items.every((it) => it.checked) ? " checked" : ""}" data-sh="${i}"><span class="cbox"></span><span class="ctext">${esc(shoppingText(g))}${src ? `<small class="sh-src">${esc(src)}</small>` : ""}</span><button class="sh-del" data-del="${i}" title="Удалить">✕</button></li>`;
+        }).join("")}</ul>`
       : `<p class="empty">Список пуст. Открой рецепт и нажми «🛒 В список покупок», или добавь блюдо выше.</p>`}`;
 
   document.getElementById("shBack").addEventListener("click", () => { location.hash = "#"; });
@@ -72,14 +102,15 @@ function renderShopping() {
   els.shoppingView.querySelectorAll(".check-item").forEach((li) => {
     const toggle = () => {
       li.classList.toggle("checked");
-      actions.checkShoppingItem(items[+li.dataset.sh].name, li.classList.contains("checked"));
+      const on = li.classList.contains("checked");
+      items[+li.dataset.sh].items.forEach((it) => actions.checkShoppingItem(it.name, on));
     };
     li.querySelector(".ctext").addEventListener("click", toggle);
     li.querySelector(".cbox").addEventListener("click", toggle);
   });
   els.shoppingView.querySelectorAll(".sh-del").forEach((b) => {
     b.addEventListener("click", () => {
-      actions.removeShoppingItem(items[+b.dataset.del].name);
+      items[+b.dataset.del].items.forEach((it) => actions.removeShoppingItem(it.name));
       updateShoppingBadge(); renderShopping();
     });
   });

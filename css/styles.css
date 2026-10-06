@@ -654,6 +654,7 @@ body.detail-open .site-header {
 
 /* =================== Список покупок =================== */
 .shopping-list .check-item { padding-right: 4px; }
+.sh-src { display: block; margin-top: 2px; font-size: .75rem; font-weight: 400; color: var(--muted); }
 .sh-del {
   margin-left: auto;
   border: none;

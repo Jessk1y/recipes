@@ -77,3 +77,5 @@ jobs:
           done < <(find js -name '*.js' | sort)
           node --check sw.js || { echo "::error file=sw.js::syntax error"; status=1; }
           exit $status
+      - name: Unit tests (js/lib)
+        run: node --test tests/
