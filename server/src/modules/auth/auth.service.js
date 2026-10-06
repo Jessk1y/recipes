@@ -101,10 +101,23 @@ async function logout(userId, { refreshToken, all }) {
   if (stored && stored.userId === userId) await revokeFamily(stored.familyId);
 }
 
+// Смена пароля из консоли (npm run set-password): новый хэш + отзыв всех refresh-токенов пользователя,
+// чтобы старые сессии не пережили смену пароля. Блокировку и роль не трогает.
+async function setPassword(email, password) {
+  const user = await prisma.user.findUnique({ where: { email } });
+  if (!user) throw new AppError(404, "USER_NOT_FOUND", "Пользователь с таким e-mail не найден");
+  const passwordHash = await bcrypt.hash(password, BCRYPT_COST);
+  const [, { count }] = await prisma.$transaction([
+    prisma.user.update({ where: { id: user.id }, data: { passwordHash } }),
+    prisma.refreshToken.updateMany({ where: { userId: user.id, revokedAt: null }, data: { revokedAt: new Date() } }),
+  ]);
+  return { user: publicUser(user), revoked: count };
+}
+
 async function me(userId) {
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user || user.isBlocked) throw new AppError(401, "UNAUTHORIZED", "Пользователь не найден");
   return publicUser(user);
 }
 
-module.exports = { register, login, refresh, logout, me };
+module.exports = { register, login, refresh, logout, me, setPassword };

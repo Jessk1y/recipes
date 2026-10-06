@@ -11,6 +11,7 @@
     "db:deploy": "prisma migrate deploy",
     "db:seed": "node prisma/seed.js",
     "create-admin": "node scripts/create-admin.js",
+    "set-password": "node scripts/set-password.js",
     "test": "node --test tests/",
     "db:backup": "node scripts/db-backup.js",
     "db:restore": "node scripts/db-restore.js",

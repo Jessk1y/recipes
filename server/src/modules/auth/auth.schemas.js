@@ -2,10 +2,12 @@ const { z } = require("zod");
 
 const email = z.string().trim().toLowerCase().email("Некорректный e-mail").max(254);
 
+// bcrypt учитывает только первые 72 байта
+const password = z.string().min(8, "Пароль — не менее 8 символов").max(72, "Пароль — не более 72 символов");
+
 const register = z.object({
   email,
-  // bcrypt учитывает только первые 72 байта
-  password: z.string().min(8, "Пароль — не менее 8 символов").max(72, "Пароль — не более 72 символов"),
+  password,
   displayName: z.string().trim().min(1, "Укажите имя").max(50),
 });
 
@@ -18,4 +20,4 @@ const logout = z.object({
   all: z.boolean().optional(),
 });
 
-module.exports = { register, login, refresh, logout };
+module.exports = { password, register, login, refresh, logout };

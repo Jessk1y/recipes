@@ -27,6 +27,7 @@ npm run dev                   # http://localhost:3000/api/v1/health
 | `npm run recipes:import -- [файл.json] --yes` | добавить в БД только **новые** рецепты из JSON (по умолчанию `../data/recipes.json`); существующие slug пропускаются; без `--yes` — только список |
 | `npm run catalog:export [-- --api <url>]` | обновить запасной `../data/recipes.json` из `/catalog/snapshot` (по умолчанию — боевой API) |
 | `npm run create-admin -- <email> <пароль> [имя]` | создать/повысить администратора |
+| `npm run set-password -- <email>` | сменить пароль пользователя: спрашивает новый пароль в терминале (скрыто, дважды), правила как при регистрации (8–72 символа); сохраняет bcrypt-хэш и отзывает все его refresh-токены (везде придётся войти заново). БД — из `DATABASE_URL` (локальная или Neon), её адрес печатается перед вопросом |
 | `npm run db:backup` | копия БД в `server/backups/` (pg_dump через Docker; локальная БД или Neon — по `DATABASE_URL`) |
 | `npm run db:restore -- [файл] --yes` | восстановить БД из копии (по умолчанию — самая свежая); **перезаписывает данные**, без `--yes` только показывает цель |
 | `npm test` | интеграционные тесты (нужна БД) |
@@ -39,6 +40,9 @@ npm run dev                   # http://localhost:3000/api/v1/health
 - **Cloudinary** — фото (`CLOUDINARY_URL`); в production без него сервер не стартует. При замене фото
   в `PUT /recipes/:id` и при удалении рецепта старый загруженный файл удаляется (если на него не
   ссылается другой рецепт); чужие URL и `images/…` не трогаются.
+- Забыли пароль (почтового сброса нет): для Neon задать `$env:DATABASE_URL`, затем
+  `npm run set-password -- user@example.com`, после — `Remove-Item Env:DATABASE_URL`. Нужен обычный
+  интерактивный терминал (скрытый ввод), пароль не попадает ни в историю команд, ни в логи.
 - Seed и `create-admin` для боевой БД запускаются с локальной машины: в окне PowerShell задать
   `$env:DATABASE_URL` строкой Neon, затем `npm run db:seed`. Резервные копии содержат хэши паролей и
   не коммитятся (`backups/` в .gitignore). На бесплатном тарифе Render сервис «засыпает» через 15 мин —
