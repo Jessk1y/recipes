@@ -221,9 +221,11 @@ function renderProfile(user) {
           <div class="verify-actions"><button class="act-btn" id="resendVerify">Отправить письмо ещё раз</button></div>
           <div id="verifyMsg" class="verify-msg" hidden></div>
         </div>` : ""}
-      <p class="sync-line" id="syncLine">${esc(syncText())}</p>
+      <div class="sync-row">
+        <p class="sync-line" id="syncLine">${esc(syncText())}</p>
+        <button class="sync-icon" id="syncNow" title="Синхронизировать сейчас" aria-label="Синхронизировать сейчас">🔄</button>
+      </div>
       <div class="detail-actions">
-        <button class="act-btn" id="syncNow">🔄 Синхронизировать</button>
         <button class="act-btn" id="toMy">📨 Мои предложения</button>
         ${isAdmin() ? `<button class="act-btn" id="toAdmin">🛠 Админка</button>` : ""}
         <button class="act-btn" id="logoutBtn">🚪 Выйти</button>
@@ -247,7 +249,11 @@ function renderProfile(user) {
       resend.disabled = false;
     }
   });
-  document.getElementById("syncNow").addEventListener("click", () => sync.flush().catch(() => {}));
+  const syncBtn = document.getElementById("syncNow");
+  syncBtn.addEventListener("click", () => {
+    syncBtn.classList.add("spinning");
+    sync.flush().catch(() => {}).finally(() => syncBtn.classList.remove("spinning"));
+  });
   document.getElementById("toMy").addEventListener("click", () => { location.hash = "#/my"; });
   const adm = document.getElementById("toAdmin");
   if (adm) adm.addEventListener("click", () => { location.hash = "#/admin"; });
