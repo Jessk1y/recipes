@@ -40,7 +40,7 @@ npm run dev                   # http://localhost:3000/api/v1/health
 - **Cloudinary** — фото (`CLOUDINARY_URL`); в production без него сервер не стартует. При замене фото
   в `PUT /recipes/:id` и при удалении рецепта старый загруженный файл удаляется (если на него не
   ссылается другой рецепт); чужие URL и `images/…` не трогаются.
-- Забыли пароль (почтового сброса нет): для Neon задать `$env:DATABASE_URL`, затем
+- Забыли пароль: на сайте есть сброс по e-mail. Если почта недоступна, пароль можно сменить из консоли: для Neon задать `$env:DATABASE_URL`, затем
   `npm run set-password -- user@example.com`, после — `Remove-Item Env:DATABASE_URL`. Нужен обычный
   интерактивный терминал (скрытый ввод), пароль не попадает ни в историю команд, ни в логи.
 - Seed и `create-admin` для боевой БД запускаются с локальной машины: в окне PowerShell задать
@@ -70,15 +70,49 @@ OpenAPI 3 — `/api/docs.json`, исходник — `src/docs/openapi.js`). З�
 
 | Метод | Путь | Доступ | Тело | Ответ |
 |---|---|---|---|---|
-| POST | `/register` | все | `{email, password ≥8, displayName}` | 201 `{user, accessToken, refreshToken}` · 409 `EMAIL_TAKEN` |
+| POST | `/register` | все | `{email, password ≥8, confirmPassword, displayName}` | 201 `{user, accessToken, refreshToken, verificationSent}` · 409 `EMAIL_TAKEN` · 422 (пароли не совпали) |
 | POST | `/login` | все | `{email, password}` | 200 как выше · 401 `INVALID_CREDENTIALS` |
 | POST | `/refresh` | все | `{refreshToken}` | 200 `{accessToken, refreshToken}` · 401 `TOKEN_REUSED` |
 | POST | `/logout` | вошедший | `{refreshToken}` или `{all: true}` | 204 |
-| GET | `/me` | вошедший | — | 200 `{id, email, displayName, role}` |
+| GET | `/me` | вошедший | — | 200 `{id, email, displayName, role, emailVerified}` |
+| POST | `/verify-email` | все | `{token}` | 200 `{verified, email}` · 400 `INVALID_TOKEN` |
+| POST | `/resend-verification` | вошедший | — | 202 · 409 `ALREADY_VERIFIED` · 429 `RESEND_TOO_SOON`/`RESEND_LIMIT` · 502 `EMAIL_SEND_FAILED` |
+| POST | `/forgot-password` | все | `{email}` | **всегда** 202 `{ok}` — не раскрывает, есть ли такой e-mail |
+| POST | `/reset-password` | все | `{token, password, confirmPassword}` | 200 · 400 `INVALID_TOKEN` · 422 |
 
 Access-токен — JWT на 15 минут (`Authorization: Bearer …`), refresh — случайная строка на 30 дней
 с ротацией; в БД лежит только её хеш. Повторное предъявление использованного refresh-токена
 отзывает всю цепочку. Ошибки: `{"error": {"code", "message", "details"}}`.
+
+### Почта: подтверждение e-mail и сброс пароля
+
+Письма уходят через HTTP API почтового сервиса: **Mailjet** (`MAILJET_API_KEY` + `MAILJET_SECRET_KEY`, бесплатно 200 писем/сутки,
+свой домен не нужен; используется, если задан ключ) или **Brevo** (`BREVO_API_KEY`). SMTP на бесплатном Render закрыт. Настройки (`.env` / панель Render): `BREVO_API_KEY`, `MAIL_FROM_EMAIL` (адрес,
+подтверждённый в Brevo как отправитель), `MAIL_FROM_NAME`, `FRONTEND_URL` (адрес сайта для ссылок в письмах).
+Без `BREVO_API_KEY` вне production письма печатаются в консоль сервера (ссылку видно в логе); в production
+без Brevo и `FRONTEND_URL` сервер не стартует. В тестах письма никогда не уходят наружу (драйвер `memory`).
+
+- **Токены** — 32 случайных байта; в письме целиком, в БД (`email_tokens`) только SHA-256. Одноразовые: гасятся
+  условным `UPDATE … WHERE used_at IS NULL`, из двух параллельных запросов сработает один. Подтверждение — 24 ч,
+  сброс пароля — 1 ч; новая ссылка сброса гасит прежнюю.
+- Ссылки ведут на фронтенд: `<FRONTEND_URL>/#/verify?token=…` и `#/reset?token=…`; страница сама шлёт токен в API
+  (предпросмотр ссылок в почтовиках токен не расходует).
+- **Повторная отправка** подтверждения и «забыли пароль»: не чаще раза в минуту и 5 писем в час на пользователя,
+  плюс лимит по IP (10 в час). Письмо «забыли пароль» уходит в фоне, ответ всегда одинаков.
+- **Сброс пароля** меняет хэш, **отзывает все refresh-токены** и подтверждает e-mail (ссылка пришла на ящик).
+- Без подтверждения e-mail войти и пользоваться личными данными можно, но действия, закрытые guard-ом
+  `requireVerifiedEmail` (403 `EMAIL_NOT_VERIFIED`; предложка рецептов — когда появится), недоступны.
+- **Чистка** (`lib/cleanup.js`, при старте через 30 с и раз в 6 ч): неподтверждённые аккаунты роли USER старше
+  7 дней удаляются (личные данные — каскадом, рецепты остаются). Администраторы не затрагиваются; пользователи,
+  существовавшие до внедрения почты, помечены подтверждёнными миграцией.
+- Письмо идёт с адреса `MAIL_FROM_EMAIL`; без своего домена Brevo подменяет домен отправителя на `brevosend.com`,
+  поэтому письма могут попадать в «Спам» — это ограничение схемы без домена.
+
+### Лимиты запросов
+
+По IP, ответ `429 RATE_LIMITED` + заголовки `RateLimit-*`: всё API — 600 / 15 мин; запись (POST/PUT/PATCH/DELETE) — 150 / 15 мин;
+`/me/sync` — 300 / 15 мин (отдельно от записи); `/auth` — 30 / 15 мин; письма — 10 / час. `/health`, `/api/docs` и
+`/uploads` без лимита. Значения — в `src/middleware/rateLimits.js`.
 
 ## API рецептов (`/api/v1`)
 

@@ -18,9 +18,21 @@ services:
         value: production
       - key: CORS_ORIGINS
         value: https://jessk1y.github.io
+      - key: FRONTEND_URL
+        value: https://jessk1y.github.io/recipes
+      - key: MAIL_FROM_NAME
+        value: Рецепты
       - key: JWT_SECRET
         generateValue: true
       - key: DATABASE_URL
         sync: false
       - key: CLOUDINARY_URL
+        sync: false
+      - key: MAILJET_API_KEY
+        sync: false
+      - key: MAILJET_SECRET_KEY
+        sync: false
+      - key: BREVO_API_KEY
+        sync: false
+      - key: MAIL_FROM_EMAIL
         sync: false

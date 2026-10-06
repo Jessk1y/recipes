@@ -11,7 +11,7 @@ import { setAccessToken } from "./api/client.js";
 import { buildToolbar, buildTags, renderList, updateAdminBtn } from "./views/list.js";
 import { renderDetail, refreshDetailData } from "./views/detail.js";
 import { renderShopping, updateShoppingBadge } from "./views/shopping.js";
-import { renderAccount, updateAccountBtn, updateSyncLine } from "./views/account.js";
+import { renderAccount, renderVerify, renderReset, updateAccountBtn, updateSyncLine } from "./views/account.js";
 import { renderAdmin } from "./views/admin.js";
 import { clearAllTimers } from "./views/timers.js";
 import { releaseWake } from "./views/wake.js";
@@ -54,6 +54,14 @@ function route() {
     renderAccount();
     releaseWake();
     window.scrollTo(0, 0);
+  } else if (/^#\/(verify|reset)(\?|$)/.test(hash)) {
+    // ссылки из писем: подтверждение e-mail и сброс пароля (экран аккаунта)
+    view = "account";
+    els.accountView.hidden = false;
+    document.body.classList.add("detail-open");
+    if (hash.startsWith("#/verify")) renderVerify(hash); else renderReset(hash);
+    releaseWake();
+    window.scrollTo(0, 0);
   } else if (hash.startsWith("#/admin")) {
     view = "admin";
     els.adminView.hidden = false;
@@ -90,7 +98,8 @@ subscribe((action) => {
       if (!action.user) setAccessToken(null);
       updateAccountBtn();
       updateAdminBtn();
-      if (view === "account" || view === "admin") route();
+      // страницы по ссылкам из писем не перерисовываем: токен одноразовый
+      if ((view === "account" || view === "admin") && !/^#\/(verify|reset)/.test(location.hash)) route();
       break;
     case "sync.status":
       updateAccountBtn();

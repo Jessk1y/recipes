@@ -7,7 +7,13 @@ const post = (body) => ({ method: "POST", body, ...slow });
 
 // ---------- auth ----------
 export const login = (email, password) => raw("/auth/login", post({ email, password }));
-export const register = (email, password, displayName) => raw("/auth/register", post({ email, password, displayName }));
+export const register = (email, password, confirmPassword, displayName) =>
+  raw("/auth/register", post({ email, password, confirmPassword, displayName }));
+export const verifyEmail = (token) => raw("/auth/verify-email", post({ token }));
+export const resendVerification = () => api("/auth/resend-verification", { auth: true, ...post() });
+export const forgotPassword = (email) => raw("/auth/forgot-password", post({ email }));
+export const resetPassword = (token, password, confirmPassword) =>
+  raw("/auth/reset-password", post({ token, password, confirmPassword }));
 export const logout = (refreshToken) => api("/auth/logout", { auth: true, method: "POST", body: { refreshToken }, timeout: 10000 });
 export const me = () => api("/auth/me", { auth: true, ...slow });
 

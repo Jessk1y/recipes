@@ -60,7 +60,8 @@ const paths = {
     post: {
       tags: ["Авторизация"],
       summary: "Регистрация",
-      description: "Создаёт пользователя с ролью USER и сразу открывает сессию. Лимит: 30 запросов за 15 минут на весь `/auth`.",
+      description:
+        "Создаёт пользователя с ролью USER, открывает сессию и отправляет письмо со ссылкой подтверждения e-mail (если почта недоступна, регистрация всё равно проходит — `verificationSent: false`, письмо можно запросить повторно). Пароль нужно ввести дважды (`confirmPassword`). Неподтверждённые аккаунты старше 7 дней удаляются. Лимит: 30 запросов за 15 минут на весь `/auth`.",
       requestBody: body(ref("RegisterInput")),
       responses: { 201: ok("Пользователь создан", ref("Session")), 409: err("E-mail занят (`EMAIL_TAKEN`)"), 422: E[422], 429: E[429] },
     },
@@ -104,6 +105,63 @@ const paths = {
       security: auth,
       requestBody: body(obj({ refreshToken: str(), all: bool })),
       responses: { 204: noContent("Сессия закрыта"), 401: E[401], 422: E[422] },
+    },
+  },
+  "/auth/verify-email": {
+    post: {
+      tags: ["Авторизация"],
+      summary: "Подтверждение e-mail по ссылке из письма",
+      description:
+        "Токен из ссылки (страница фронтенда `#/verify?token=…` отправляет его сюда). Одноразовый, действует 24 часа, в БД хранится только его SHA-256. Вход не требуется — ссылку можно открыть на другом устройстве.",
+      requestBody: body(obj({ token: str() }, ["token"])),
+      responses: {
+        200: ok("E-mail подтверждён", obj({ verified: bool, email: str({ format: "email" }) })),
+        400: err("Ссылка недействительна, устарела или уже использована (`INVALID_TOKEN`)"),
+        422: E[422],
+        429: E[429],
+      },
+    },
+  },
+  "/auth/resend-verification": {
+    post: {
+      tags: ["Авторизация"],
+      summary: "Повторно отправить письмо подтверждения",
+      description:
+        "Не чаще раза в минуту и не больше 5 писем в час на пользователя (`RESEND_TOO_SOON`, `RESEND_LIMIT`); дополнительно — не больше 10 запросов в час с одного IP. Старые ссылки остаются действительными до истечения срока.",
+      security: auth,
+      responses: {
+        202: ok("Письмо отправлено", obj({ ok: bool })),
+        401: E[401],
+        403: E[403],
+        409: err("E-mail уже подтверждён (`ALREADY_VERIFIED`)"),
+        429: err("`RESEND_TOO_SOON`, `RESEND_LIMIT` или `RATE_LIMITED`"),
+        502: err("Почтовый сервис не принял письмо (`EMAIL_SEND_FAILED`)"),
+      },
+    },
+  },
+  "/auth/forgot-password": {
+    post: {
+      tags: ["Авторизация"],
+      summary: "Забыли пароль: письмо со ссылкой для сброса",
+      description:
+        "Ответ всегда одинаковый (202), независимо от того, зарегистрирован ли e-mail, — адреса перебирать нельзя. Ссылка одноразовая, действует 1 час; действует только последняя запрошенная. Не чаще раза в минуту и 5 раз в час на пользователя (лишние запросы молча игнорируются); не больше 10 запросов в час с одного IP.",
+      requestBody: body(obj({ email: str({ format: "email" }) }, ["email"])),
+      responses: { 202: ok("Если такой e-mail есть, письмо отправлено", obj({ ok: bool })), 422: E[422], 429: E[429] },
+    },
+  },
+  "/auth/reset-password": {
+    post: {
+      tags: ["Авторизация"],
+      summary: "Установить новый пароль по ссылке из письма",
+      description:
+        "Меняет пароль, **отзывает все сессии** пользователя (везде придётся войти заново) и подтверждает e-mail. Токен одноразовый.",
+      requestBody: body(ref("ResetPasswordInput")),
+      responses: {
+        200: ok("Пароль изменён", obj({ ok: bool })),
+        400: err("Ссылка недействительна, устарела или уже использована (`INVALID_TOKEN`)"),
+        422: E[422],
+        429: E[429],
+      },
     },
   },
   "/auth/me": {
@@ -448,17 +506,31 @@ const schemas = {
     },
     ["error"]
   ),
-  PublicUser: obj({ id: uuid, email: str({ format: "email" }), displayName: str(), role: roleEnum }),
+  PublicUser: obj({ id: uuid, email: str({ format: "email" }), displayName: str(), role: roleEnum, emailVerified: bool }),
   AdminUser: obj({ id: uuid, email: str({ format: "email" }), displayName: str(), role: roleEnum, isBlocked: bool, createdAt: dateTime }),
   Tokens: obj({ accessToken: str({ description: "JWT на 15 минут" }), refreshToken: str({ description: "Одноразовый, 30 дней" }) }),
-  Session: obj({ user: ref("PublicUser"), accessToken: str(), refreshToken: str() }),
+  Session: obj({
+    user: ref("PublicUser"),
+    accessToken: str(),
+    refreshToken: str(),
+    verificationSent: { type: "boolean", description: "Только при регистрации: ушло ли письмо подтверждения" },
+  }),
   RegisterInput: obj(
     {
       email: str({ format: "email" }),
       password: str({ minLength: 8, maxLength: 72 }),
+      confirmPassword: str({ description: "Повтор пароля; должен совпадать с `password`" }),
       displayName: str({ minLength: 1, maxLength: 50 }),
     },
-    ["email", "password", "displayName"]
+    ["email", "password", "confirmPassword", "displayName"]
+  ),
+  ResetPasswordInput: obj(
+    {
+      token: str({ description: "Токен из ссылки в письме" }),
+      password: str({ minLength: 8, maxLength: 72 }),
+      confirmPassword: str(),
+    },
+    ["token", "password", "confirmPassword"]
   ),
   LoginInput: obj({ email: str({ format: "email" }), password: str() }, ["email", "password"]),
   Category: obj({ id: uuid, name: str(), slug: str(), count: int }),
@@ -549,6 +621,7 @@ module.exports = {
     description:
       "Все пути — под префиксом `/api/v1`. Access-токен (JWT, 15 минут) передаётся как `Authorization: Bearer …`; " +
       "refresh-токен обновляется через `/auth/refresh`. Ошибки имеют единый формат `{error: {code, message, details}}`.\n\n" +
+      "**Лимиты запросов** (по IP, ответ `429 RATE_LIMITED`, заголовки `RateLimit-*`): всё API — 600 за 15 минут; запись (POST/PUT/PATCH/DELETE) — 150 за 15 минут; `/me/sync` — 300 за 15 минут; `/auth` — 30 за 15 минут; письма (`forgot-password`, `resend-verification`) — 10 в час. `/health` без лимита.\n\n" +
       "Чтобы пробовать защищённые методы: выполните `/auth/login`, скопируйте `accessToken` и нажмите **Authorize**.",
   },
   servers: [{ url: "/api/v1", description: "Текущий сервер" }],

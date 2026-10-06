@@ -759,6 +759,10 @@ body.detail-open .site-header {
 .auth-hint { color: var(--muted); font-size: .9rem; margin: 0 0 16px; }
 .auth-hint.small { font-size: .8rem; margin-top: 18px; }
 .sync-line { font-weight: 700; margin: 0 0 16px; }
+.link-btn { background: none; border: none; color: var(--accent); font: inherit; font-weight: 700; font-size: .9rem; cursor: pointer; padding: 4px; align-self: center; text-decoration: underline; }
+.verify-note { margin-bottom: 16px; font-weight: 600; line-height: 1.45; }
+.verify-actions { margin-top: 10px; }
+.verify-msg { margin-top: 8px; font-size: .85rem; }
 
 /* =================== Формы =================== */
 .form { display: flex; flex-direction: column; gap: 14px; }

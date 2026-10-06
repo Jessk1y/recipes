@@ -2,10 +2,13 @@ const env = require("./config/env");
 const app = require("./app");
 const logger = require("./lib/logger");
 const prisma = require("./lib/prisma");
+const cleanup = require("./lib/cleanup");
 
 const server = app.listen(env.PORT, () =>
   logger.info(`API запущен: http://localhost:${env.PORT}/api/v1/health`)
 );
+
+cleanup.schedule();
 
 function shutdown() {
   server.close(async () => {

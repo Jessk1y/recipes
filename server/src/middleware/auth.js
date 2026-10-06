@@ -54,4 +54,19 @@ async function requireActiveAdmin(req, res, next) {
   }
 }
 
-module.exports = { requireAuth, optionalAuth, requireRole, requireActiveAdmin };
+// Для действий, доступных только пользователям с подтверждённым e-mail (например, предложить рецепт).
+// Ставится после requireAuth; статус читается из БД, а не из JWT — подтверждение действует сразу.
+// Пока такой маршрут не появился, guard покрыт тестами (tests/email.test.js).
+async function requireVerifiedEmail(req, res, next) {
+  try {
+    const user = await prisma.user.findUnique({ where: { id: req.user.id }, select: { emailVerifiedAt: true, isBlocked: true } });
+    if (!user) return next(new AppError(401, "UNAUTHORIZED", "Пользователь не найден"));
+    if (user.isBlocked) return next(new AppError(403, "ACCOUNT_BLOCKED", "Аккаунт заблокирован"));
+    if (!user.emailVerifiedAt) return next(new AppError(403, "EMAIL_NOT_VERIFIED", "Подтвердите e-mail, чтобы выполнить это действие"));
+    next();
+  } catch (e) {
+    next(e);
+  }
+}
+
+module.exports = { requireAuth, optionalAuth, requireRole, requireActiveAdmin, requireVerifiedEmail };

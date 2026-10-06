@@ -29,9 +29,12 @@ model User {
   displayName  String   @map("display_name")
   role         Role     @default(USER)
   isBlocked    Boolean  @default(false) @map("is_blocked")
+  // null — e-mail не подтверждён; такие аккаунты старше 7 дней удаляются (lib/cleanup.js)
+  emailVerifiedAt DateTime? @map("email_verified_at")
   createdAt    DateTime @default(now()) @map("created_at")
 
   refreshTokens RefreshToken[]
+  emailTokens   EmailToken[]
   recipes       Recipe[]
   favorites     Favorite[]
   notes         Note[]
@@ -54,6 +57,27 @@ model RefreshToken {
   @@index([userId])
   @@index([familyId])
   @@map("refresh_tokens")
+}
+
+enum EmailTokenType {
+  VERIFY
+  RESET
+}
+
+// Одноразовые ссылки из писем (подтверждение e-mail, сброс пароля). В БД только SHA-256 токена.
+model EmailToken {
+  id        String         @id @default(uuid()) @db.Uuid
+  userId    String         @map("user_id") @db.Uuid
+  type      EmailTokenType
+  tokenHash String         @unique @map("token_hash")
+  expiresAt DateTime       @map("expires_at")
+  usedAt    DateTime?      @map("used_at")
+  createdAt DateTime       @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, type, createdAt])
+  @@map("email_tokens")
 }
 
 model Category {

@@ -9,6 +9,7 @@ const logger = require("./lib/logger");
 const prisma = require("./lib/prisma");
 const storage = require("./lib/storage");
 const openapi = require("./docs/openapi");
+const limiters = require("./middleware/rateLimits");
 const { notFound, errorHandler } = require("./middleware/errorHandler");
 
 const app = express();
@@ -43,6 +44,9 @@ app.use(
 app.get("/api/docs.json", (req, res) => res.json(openapi));
 app.use("/api/docs", swaggerUi.serve, swaggerUi.setup(openapi, { customSiteTitle: "API сайта рецептов" }));
 
+// общие лимиты на всё API (health, документация и статика фото выше — без лимита)
+app.use("/api/v1", limiters.global, limiters.write);
+
 app.use("/api/v1/auth", require("./modules/auth/auth.router"));
 app.use("/api/v1/recipes", require("./modules/recipes/recipes.router"));
 app.get("/api/v1/catalog/snapshot", require("./modules/recipes/recipes.controller").snapshot);
@@ -50,7 +54,7 @@ app.use("/api/v1", require("./modules/taxonomy/taxonomy.router"));
 app.use("/api/v1/uploads", require("./modules/media/media.router"));
 // личные данные (только для вошедшего): более конкретные пути подключаются раньше /me
 app.use("/api/v1/me/shopping", require("./modules/shopping/shopping.router"));
-app.use("/api/v1/me/sync", require("./modules/sync/sync.router"));
+app.use("/api/v1/me/sync", limiters.sync, require("./modules/sync/sync.router"));
 app.use("/api/v1/me", require("./modules/me/me.router"));
 app.use("/api/v1/admin", require("./modules/admin/admin.router"));
 

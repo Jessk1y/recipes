@@ -1,13 +1,13 @@
 // Service worker — офлайн-кэш для PWA «Мои рецепты»
-const CACHE = "recipes-v16";
+const CACHE = "recipes-v17";
 const IMG_CACHE = "recipes-img-v1"; // фото рецептов — переживают смену версии
 // ES-модули импортируются без ?v, поэтому при смене версии все файлы скачиваются заново
 // мимо HTTP-кэша (cache: "reload"). Новый модуль в js/ — добавить сюда.
 const ASSETS = [
   "./",
   "index.html",
-  "css/styles.css?v=16",
-  "js/main.js?v=16",
+  "css/styles.css?v=17",
+  "js/main.js?v=17",
   "js/config.js",
   "js/core/storage.js",
   "js/core/store.js",

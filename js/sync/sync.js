@@ -161,8 +161,11 @@ async function startSession(r) {
 export async function login(email, password) {
   await startSession(await endpoints.login(email, password));
 }
-export async function register(email, password, displayName) {
-  await startSession(await endpoints.register(email, password, displayName));
+// Возвращает { verificationSent }: ушло ли письмо с подтверждением e-mail
+export async function register(email, password, confirmPassword, displayName) {
+  const r = await endpoints.register(email, password, confirmPassword, displayName);
+  await startSession(r);
+  return { verificationSent: r.verificationSent !== false };
 }
 
 // Выход: сначала отправляем outbox; если что-то не ушло — спрашиваем. Личные данные стираются с устройства.

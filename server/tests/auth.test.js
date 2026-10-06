@@ -25,13 +25,13 @@ test("health: сервер и БД отвечают", async () => {
 });
 
 test("register: валидация (короткий пароль → 422)", async () => {
-  const r = await api("post", "/auth/register").send({ email, password: "123", displayName: "Т" });
+  const r = await api("post", "/auth/register").send({ email, password: "123", confirmPassword: "123", displayName: "Т" });
   assert.equal(r.status, 422);
   assert.equal(r.body.error.code, "VALIDATION_ERROR");
 });
 
 test("register: успех, роль USER, хеш пароля наружу не отдаётся", async () => {
-  const r = await api("post", "/auth/register").send({ email, password, displayName: "Тест" });
+  const r = await api("post", "/auth/register").send({ email, password, confirmPassword: password, displayName: "Тест" });
   assert.equal(r.status, 201);
   assert.equal(r.body.user.role, "USER");
   assert.ok(r.body.accessToken && r.body.refreshToken);
@@ -40,7 +40,7 @@ test("register: успех, роль USER, хеш пароля наружу не
 });
 
 test("register: повторный e-mail → 409 EMAIL_TAKEN", async () => {
-  const r = await api("post", "/auth/register").send({ email: email.toUpperCase(), password, displayName: "Т" });
+  const r = await api("post", "/auth/register").send({ email: email.toUpperCase(), password, confirmPassword: password, displayName: "Т" });
   assert.equal(r.status, 409);
   assert.equal(r.body.error.code, "EMAIL_TAKEN");
 });

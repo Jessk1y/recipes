@@ -2,13 +2,20 @@ const crypto = require("crypto");
 const bcrypt = require("bcrypt");
 const prisma = require("../../lib/prisma");
 const { AppError } = require("../../lib/errors");
+const emailAuth = require("./emailAuth.service");
 const { signAccessToken, newRefreshToken, hashToken, REFRESH_TTL_MS } = require("../../lib/jwt");
 
 const BCRYPT_COST = 12;
 // выравнивает время ответа, когда пользователь не найден (защита от перебора e-mail)
 const DUMMY_HASH = bcrypt.hashSync("dummy-password", BCRYPT_COST);
 
-const publicUser = (u) => ({ id: u.id, email: u.email, displayName: u.displayName, role: u.role });
+const publicUser = (u) => ({
+  id: u.id,
+  email: u.email,
+  displayName: u.displayName,
+  role: u.role,
+  emailVerified: !!u.emailVerifiedAt,
+});
 const emailTaken = () => new AppError(409, "EMAIL_TAKEN", "Пользователь с таким e-mail уже существует");
 
 async function issueRefreshToken(userId, familyId, db = prisma) {
@@ -39,7 +46,9 @@ async function register({ email, password, displayName }) {
     if (e.code === "P2002") throw emailTaken();
     throw e;
   }
-  return startSession(user);
+  // письмо с подтверждением; если почта не сработала, регистрация всё равно удалась (письмо можно запросить повторно)
+  const verificationSent = await emailAuth.sendVerificationAfterRegister(user);
+  return { ...(await startSession(user)), verificationSent };
 }
 
 async function login({ email, password }) {
