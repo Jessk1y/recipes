@@ -9,7 +9,7 @@ import { ApiError, NetworkError, imageUrl } from "../api/client.js";
 import { esc } from "../lib/utils.js";
 import { getCatalog } from "../core/store.js";
 import { mountTurnstile } from "../lib/turnstile.js";
-import { productNames } from "../lib/products.js";
+import { buildSuggestions, suggest, norm } from "../lib/suggest.js";
 import { UNITS, ingredientRows, ingredientsOut, stepRows, stepsOut, hasTime } from "../lib/recipeFields.js";
 
 const FIELD_NAMES = {
@@ -17,17 +17,13 @@ const FIELD_NAMES = {
   image: "Фото", time: "Время", servings: "Порции", ingredients: "Ингредиенты", steps: "Шаги", status: "Статус",
 };
 
-// Подсказки продуктов: словарь корзины + названия ингредиентов из каталога
+// Подсказки продуктов: словарь корзины + названия ингредиентов из каталога, без дублей
 function productSuggestions() {
-  const names = new Set(productNames());
+  const raw = [];
   for (const rec of getCatalog().recipes) {
-    for (const i of rec.ingredients) {
-      if (typeof i !== "string") continue;
-      const n = i.split(" — ")[0].trim();
-      if (n) names.add(n);
-    }
+    for (const i of rec.ingredients) if (typeof i === "string") raw.push(i.split(" — ")[0]);
   }
-  return [...names].sort((x, y) => x.localeCompare(y, "ru"));
+  return buildSuggestions(raw);
 }
 
 const TXT = 'spellcheck="true" lang="ru" autocapitalize="sentences"';
@@ -111,7 +107,6 @@ export function mountRecipeForm(host, o) {
           <button type="button" class="tool-btn" id="ingAdd">＋ Ингредиент</button>
           <button type="button" class="tool-btn" id="ingAddH">＋ Подзаголовок</button>
         </div>
-        <datalist id="productList">${productSuggestions().map((n) => `<option value="${esc(n)}">`).join("")}</datalist>
       </div>
       <div class="field">Шаги * <span class="hint">— время в тексте («15 мин») даёт таймер</span>
         <div id="stepList" class="rows"></div>
@@ -183,7 +178,7 @@ export function mountRecipeForm(host, o) {
     document.getElementById("ingList").innerHTML = ing.map((x, i) => x.h
       ? `<div class="row row-h" data-i="${i}"><input class="ct-input" data-f="name" ${TXT} maxlength="200" placeholder="Подзаголовок, например «Для соуса»" value="${esc(x.name)}">${ctrls(i, ing.length)}</div>`
       : `<div class="row row-ing" data-i="${i}">
-          <input class="ct-input ing-name" data-f="name" list="productList" ${TXT} maxlength="200" placeholder="Продукт" value="${esc(x.name)}">
+          <input class="ct-input ing-name" data-f="name" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" ${TXT} maxlength="200" placeholder="Продукт" value="${esc(x.name)}">
           <input class="ct-input ing-qty" data-f="qty" inputmode="decimal" maxlength="20" placeholder="Кол-во" value="${esc(x.qty)}">
           <select class="ct-input ing-unit" data-f="unit" aria-label="Единица">${unitOptions(x.unit)}</select>
           ${ctrls(i, ing.length)}</div>`).join("");
@@ -229,6 +224,92 @@ export function mountRecipeForm(host, o) {
   drawSteps();
   editor("ingList", ing, drawIng);
   editor("stepList", steps, drawSteps);
+
+  // Свой выпадающий список названий продуктов (вместо datalist): ↑↓/Enter/Esc, тап, закрытие по клику вне
+  const entries = productSuggestions();
+  const box = document.createElement("ul");
+  box.className = "sugg";
+  box.id = "suggBox";
+  box.setAttribute("role", "listbox");
+  box.hidden = true;
+  host.appendChild(box);
+  let cur = null, items = [], active = -1; // cur — поле названия, к которому привязан список
+  const closeSugg = () => {
+    box.hidden = true;
+    if (cur) cur.setAttribute("aria-expanded", "false");
+    cur = null; items = []; active = -1;
+  };
+  const place = () => {
+    if (!cur) return;
+    const rc = cur.getBoundingClientRect();
+    box.style.left = rc.left + "px";
+    box.style.width = rc.width + "px";
+    const below = innerHeight - rc.bottom, need = Math.min(box.scrollHeight, 8 * 46) + 8;
+    // не помещается снизу (клавиатура на телефоне) — открываем над полем
+    if (below < need && rc.top > below) { box.style.top = "auto"; box.style.bottom = innerHeight - rc.top + 4 + "px"; }
+    else { box.style.bottom = "auto"; box.style.top = rc.bottom + 4 + "px"; }
+  };
+  const markActive = () => {
+    [...box.children].forEach((li, k) => {
+      li.classList.toggle("active", k === active);
+      li.setAttribute("aria-selected", k === active ? "true" : "false");
+    });
+    if (active >= 0) box.children[active].scrollIntoView({ block: "nearest" });
+  };
+  const openSugg = (input) => {
+    cur = input;
+    items = suggest(entries, input.value);
+    active = -1;
+    if (!items.length) { closeSugg(); return; }
+    const q = norm(input.value);
+    box.innerHTML = items.map((e, k) => {
+      const at = norm(e.name).indexOf(q);
+      const label = at < 0 ? esc(e.name)
+        : esc(e.name.slice(0, at)) + "<mark>" + esc(e.name.slice(at, at + q.length)) + "</mark>" + esc(e.name.slice(at + q.length));
+      return `<li role="option" data-k="${k}">${label}</li>`;
+    }).join("");
+    box.hidden = false;
+    input.setAttribute("aria-expanded", "true");
+    place();
+  };
+  const pick = (k) => {
+    const input = cur;
+    if (!input || !items[k]) return;
+    input.value = items[k].name;
+    ing[+input.closest(".row").dataset.i].name = items[k].name;
+    closeSugg();
+    const qty = input.closest(".row").querySelector(".ing-qty");
+    if (qty) qty.focus();
+  };
+  const ingBox = document.getElementById("ingList");
+  const isName = (t) => t.classList && t.classList.contains("ing-name");
+  ingBox.addEventListener("input", (e) => { if (isName(e.target)) openSugg(e.target); });
+  ingBox.addEventListener("focusin", (e) => { if (isName(e.target) && e.target.value) openSugg(e.target); });
+  ingBox.addEventListener("keydown", (e) => {
+    if (!isName(e.target) || box.hidden) return;
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      active = (active + (e.key === "ArrowDown" ? 1 : -1) + items.length) % items.length;
+      markActive();
+    } else if (e.key === "Enter" && active >= 0) { e.preventDefault(); pick(active); }
+    else if (e.key === "Escape") { e.preventDefault(); closeSugg(); }
+    else if (e.key === "Tab") closeSugg();
+  });
+  // pointerdown + preventDefault: поле не теряет фокус, на телефоне не дёргается клавиатура
+  box.addEventListener("pointerdown", (e) => {
+    const li = e.target.closest("li");
+    if (!li) return;
+    e.preventDefault();
+    pick(+li.dataset.k);
+  });
+  const outside = (e) => {
+    if (!form.isConnected) { document.removeEventListener("pointerdown", outside, true); window.removeEventListener("resize", place); window.removeEventListener("scroll", place, true); return; }
+    if (cur && e.target !== cur && !box.contains(e.target)) closeSugg();
+  };
+  document.addEventListener("pointerdown", outside, true);
+  window.addEventListener("resize", place);
+  window.addEventListener("scroll", place, true);
+  ingBox.addEventListener("click", (e) => { if (e.target.closest("button")) closeSugg(); }, true); // ↑↓/✕ перерисовывают список строк — подсказки закрыть
   document.getElementById("ingAdd").addEventListener("click", () => addRow(ing, drawIng, "ingList", newIng()));
   document.getElementById("ingAddH").addEventListener("click", () => addRow(ing, drawIng, "ingList", { h: true, name: "" }));
   document.getElementById("stepAdd").addEventListener("click", () => addRow(steps, drawSteps, "stepList", newStep()));

@@ -912,3 +912,11 @@ a.act-btn { text-decoration: none; display: inline-flex; align-items: center; }
   .row-ing .ing-qty { flex: 1 1 4em; }
   .row-ing .ing-unit { flex: 1 1 6em; }
 }
+
+/* Выпадающий список подсказок продуктов */
+.sugg { position: fixed; z-index: 60; margin: 0; padding: 4px; list-style: none; max-height: 60vh; overflow-y: auto;
+  background: var(--card); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,.18); }
+.sugg[hidden] { display: none; }
+.sugg li { padding: 12px 12px; min-height: 44px; box-sizing: border-box; border-radius: 8px; cursor: pointer; font-weight: 600; }
+.sugg li.active, .sugg li:hover { background: var(--accent-soft); }
+.sugg mark { background: none; color: var(--accent); font-weight: 800; }
