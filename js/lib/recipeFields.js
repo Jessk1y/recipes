@@ -54,3 +54,39 @@ export function stepsOut(rows) {
 }
 
 export const hasTime = (text) => stepSeconds(text) > 0;
+
+// слова про время, которые таймер шага не поймёт («полчаса», «пару минут», «10 секунд»)
+const TIME_WORD = /(^|[^а-яё])(полчаса|получаса|час|часа|часов|мин|минут\p{L}*|сек|секунд\p{L}*|ночь|сутки)(?![а-яё])/iu;
+
+/**
+ * Недочёты рецепта для подсказок под предпросмотром. Работает по строкам редактора (ingredientRows/stepRows),
+ * потому что пустые строки при сохранении молча отбрасываются — о них нужно предупредить заранее.
+ * @param f {title, main[], image, time, servings, ing: rows, steps: rows}
+ * @returns {string[]} тексты замечаний; пусто — всё в порядке
+ */
+export function recipeHints(f) {
+  const out = [];
+  const trim = (s) => String(s || "").trim();
+  if (!trim(f.title)) out.push("Не указано название.");
+  if (!(f.main || []).length) out.push("Не отмечен ни один основной тег — рецепт не попадёт в фильтр на главной.");
+  if (!f.image) out.push("Нет фото — вместо него будет эмодзи.");
+  if (!trim(f.time)) out.push("Не указано время приготовления.");
+  if (!trim(f.servings)) out.push("Не указаны порции.");
+
+  const ing = f.ing || [];
+  const emptyIng = ing.filter((r) => !trim(r.name)).length;
+  if (emptyIng) out.push(`Пустых строк в ингредиентах: ${emptyIng} — при сохранении они пропадут.`);
+  if (!ing.some((r) => !r.h && trim(r.name))) out.push("Нет ни одного ингредиента.");
+
+  const steps = f.steps || [];
+  let n = 0;
+  steps.forEach((r) => {
+    if (r.h) return;
+    n++;
+    const text = trim(r.text);
+    if (!text) out.push(`Шаг ${n} пустой — при сохранении он пропадёт.`);
+    else if (!hasTime(text) && TIME_WORD.test(text)) out.push(`Шаг ${n}: упоминается время, но таймер не распознан — напишите, например, «30 мин».`);
+  });
+  if (!steps.some((r) => !r.h && trim(r.text))) out.push("Нет ни одного шага.");
+  return out;
+}

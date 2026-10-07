@@ -1,6 +1,6 @@
 // Админ-панель рецептов: #/admin (список, включая черновики), #/admin/new, #/admin/edit/<slug>,
-// #/admin/submissions (предложения пользователей), #/admin/review/<slug> (поправить и опубликовать)
-// и #/admin/stats (статистика).
+// #/admin/submissions (предложения пользователей), #/admin/preview/<slug> (посмотреть предложение как страницу рецепта),
+// #/admin/review/<slug> (поправить и опубликовать) и #/admin/stats (статистика).
 // Работает только онлайн (без outbox); права проверяет сервер — здесь только скрываем лишнее.
 import { WAKE_HINT_AFTER } from "../config.js";
 import { els } from "./ui.js";
@@ -10,6 +10,10 @@ import { ApiError, NetworkError, imageUrl } from "../api/client.js";
 import { refreshCatalog } from "../sync/catalog.js";
 import { esc, toast, emojiFor } from "../lib/utils.js";
 import { mountRecipeForm } from "./recipeForm.js";
+import { mountRecipeView } from "./recipeView.js";
+import { clearAllTimers, bindTimers, addCustomTimer, startCustomTimer } from "./timers.js";
+import { fromApi } from "../sync/catalog.js";
+import { ingredientRows, stepRows, recipeHints } from "../lib/recipeFields.js";
 import { statsHTML } from "./adminStats.js";
 import { pushBoxHTML, mountPushBox } from "./adminPush.js";
 
@@ -26,9 +30,11 @@ export function renderAdmin(path) {
   }
   const m = path.match(/^\/edit\/(.+)$/);
   const rv = path.match(/^\/review\/(.+)$/);
+  const pv = path.match(/^\/preview\/(.+)$/);
   if (path === "/new") renderForm(null, seq);
   else if (m) renderForm(decodeURIComponent(m[1]), seq);
   else if (rv) renderReview(decodeURIComponent(rv[1]), seq);
+  else if (pv) renderPreview(decodeURIComponent(pv[1]), seq);
   else if (path === "/submissions") renderQueue(seq);
   else if (path === "/stats") renderStats(seq);
   else renderList(seq);
@@ -258,6 +264,7 @@ async function renderQueue(seq) {
             ${esc(r.category.name)} · ${esc(r.author ? `${r.author.displayName} (${r.author.email})` : "автор удалён")} · ${esc(when)}</div>
         </div>
         <div class="admin-btns">
+          <button class="act-btn" data-act="view">👁 Посмотреть</button>
           <button class="act-btn" data-act="review">✏️ Поправить и опубликовать</button>
           <button class="act-btn" data-act="approve">✅ Одобрить</button>
           <button class="act-btn danger" data-act="reject">❌ Отклонить</button>
@@ -274,25 +281,76 @@ async function renderQueue(seq) {
     if (!btn) return;
     const r = items.find((x) => x.id === btn.closest(".admin-row").dataset.id);
     if (btn.dataset.act === "review") { location.hash = "#/admin/review/" + encodeURIComponent(r.slug); return; }
-    const rejecting = btn.dataset.act === "reject";
-    let reason = null;
-    if (rejecting) {
-      reason = prompt(`Причина отказа для «${r.title}» (её увидит автор):`);
-      if (reason === null) return;
-      if (reason.trim().length < 3) { toast("⚠️ Укажите причину (от 3 символов)"); return; }
-    }
-    btn.disabled = true;
-    try {
-      if (rejecting) await endpoints.rejectSubmission(r.id, reason.trim()); else await endpoints.approveSubmission(r.id);
-      items = items.filter((x) => x !== r);
-      toast(rejecting ? "Отклонено" : "Опубликовано ✅");
-      draw();
-      if (!rejecting) refreshCatalog().catch(() => {});
-    } catch (err) {
-      btn.disabled = false;
-      toast("⚠️ " + (err instanceof NetworkError ? "Нет связи с сервером" : err.message));
-      if (err instanceof ApiError && err.status === 409) renderAdmin("/submissions"); // уже рассмотрено — обновить очередь
-    }
+    if (btn.dataset.act === "view") { location.hash = "#/admin/preview/" + encodeURIComponent(r.slug); return; }
+    const res = await moderate(r, btn.dataset.act === "reject", btn);
+    if (res === "ok") { items = items.filter((x) => x !== r); draw(); }
+    else if (res === "conflict") renderAdmin("/submissions"); // уже рассмотрено — обновить очередь
+  });
+}
+
+// Одобрить или отклонить предложение (очередь и предпросмотр). "ok" | "conflict" (уже рассмотрено) | "fail" | "cancel"
+async function moderate(r, rejecting, btn) {
+  let reason = null;
+  if (rejecting) {
+    reason = prompt(`Причина отказа для «${r.title}» (её увидит автор):`);
+    if (reason === null) return "cancel";
+    if (reason.trim().length < 3) { toast("⚠️ Укажите причину (от 3 символов)"); return "cancel"; }
+  }
+  btn.disabled = true;
+  try {
+    if (rejecting) await endpoints.rejectSubmission(r.id, reason.trim()); else await endpoints.approveSubmission(r.id);
+    toast(rejecting ? "Отклонено" : "Опубликовано ✅");
+    if (!rejecting) refreshCatalog().catch(() => {});
+    return "ok";
+  } catch (err) {
+    btn.disabled = false;
+    toast("⚠️ " + (err instanceof NetworkError ? "Нет связи с сервером" : err.message));
+    return err instanceof ApiError && err.status === 409 ? "conflict" : "fail";
+  }
+}
+
+// Предложение глазами посетителя: страница рецепта (без сохранений) + подсказки и кнопки решения
+async function renderPreview(slug, seq) {
+  const hint = loading("Загрузка предложения…");
+  let item;
+  try {
+    item = (await endpoints.adminQueue()).find((x) => x.slug === slug);
+  } catch (e) {
+    if (seq === renderSeq) showError(e, () => renderAdmin("/preview/" + encodeURIComponent(slug)));
+    return;
+  } finally {
+    clearTimeout(hint);
+  }
+  if (seq !== renderSeq) return;
+  if (!item) { toast("Предложение уже рассмотрено"); location.hash = "#/admin/submissions"; return; }
+  const toQueue = () => { location.hash = "#/admin/submissions"; };
+  els.adminView.innerHTML = `
+    <div class="detail-top">
+      <button class="back-btn" id="pvBack">← К предложениям</button>
+      <div class="detail-actions">
+        <button class="act-btn" data-act="approve">✅ Одобрить</button>
+        <button class="act-btn danger" data-act="reject">❌ Отклонить</button>
+        <button class="act-btn" data-act="review">✏️ Поправить и опубликовать</button>
+      </div>
+    </div>
+    <div class="form-msg info">Предложил(а): ${esc(item.author ? `${item.author.displayName} · ${item.author.email}` : "автор удалён")}. Так рецепт увидят на сайте — ничего не сохраняется.</div>
+    <div id="pvBody" class="rf-prev-body"></div>
+    <div id="pvHints" class="rf-hints"></div>`;
+  const hints = recipeHints({ ...item, ing: ingredientRows(item.ingredients), steps: stepRows(item.steps) });
+  document.getElementById("pvHints").innerHTML = hints.length
+    ? `<div class="rf-hints-title">Что поправить</div><ul>${hints.map((h) => `<li>${esc(h)}</li>`).join("")}</ul>`
+    : `<div class="rf-hints-ok">✅ Недочётов не видно</div>`;
+  clearAllTimers();
+  mountRecipeView(document.getElementById("pvBody"), fromApi(item), {
+    preview: true, timers: { bind: bindTimers, addCustom: addCustomTimer, startCustom: startCustomTimer },
+  });
+  document.getElementById("pvBack").addEventListener("click", toQueue);
+  els.adminView.querySelector(".detail-actions").addEventListener("click", async (e) => {
+    const btn = e.target.closest("[data-act]");
+    if (!btn) return;
+    if (btn.dataset.act === "review") { location.hash = "#/admin/review/" + encodeURIComponent(item.slug); return; }
+    const res = await moderate(item, btn.dataset.act === "reject", btn);
+    if (res === "ok" || res === "conflict") toQueue();
   });
 }
 

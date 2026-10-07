@@ -10,7 +10,10 @@ import { esc } from "../lib/utils.js";
 import { getCatalog } from "../core/store.js";
 import { mountTurnstile } from "../lib/turnstile.js";
 import { buildSuggestions, suggest, norm } from "../lib/suggest.js";
-import { UNITS, ingredientRows, ingredientsOut, stepRows, stepsOut, hasTime } from "../lib/recipeFields.js";
+import { UNITS, ingredientRows, ingredientsOut, stepRows, stepsOut, hasTime, recipeHints } from "../lib/recipeFields.js";
+import { fromApi } from "../sync/catalog.js";
+import { mountRecipeView } from "./recipeView.js";
+import { clearAllTimers, bindTimers, addCustomTimer, startCustomTimer } from "./timers.js";
 
 const FIELD_NAMES = {
   title: "Название", slug: "Адрес (slug)", category: "Категория", main: "Основные теги", tags: "Теги",
@@ -77,6 +80,12 @@ export function mountRecipeForm(host, o) {
       ${o.topExtra || ""}
     </div>
     <h1 class="detail-title">${esc(o.title)}</h1>
+    <div class="rf-modes" role="group" aria-label="Режим">
+      <button type="button" class="rf-mode active" data-mode="edit" aria-pressed="true">✏️ Редактор</button>
+      <button type="button" class="rf-mode" data-mode="preview" aria-pressed="false">👁 Предпросмотр</button>
+    </div>
+    <div class="rf-split" id="rfSplit" data-mode="edit">
+    <div class="rf-edit">
     ${o.notice || ""}
     <form id="recipeForm" class="form admin-form" novalidate>
       <div id="formMsg" class="form-msg" hidden></div>
@@ -122,7 +131,14 @@ export function mountRecipeForm(host, o) {
         <button class="tool-btn accent" type="submit" id="saveBtn">${esc(o.saveLabel || "💾 Сохранить")}</button>
         <button class="tool-btn" type="button" id="cancelBtn">Отмена</button>
       </div>
-    </form>`;
+    </form>
+    </div>
+    <aside class="rf-prev" aria-label="Предпросмотр">
+      <div class="rf-prev-label">Так рецепт увидят на сайте <span class="hint">— ничего не сохраняется</span></div>
+      <div id="rfPreview" class="rf-prev-body"></div>
+      <div id="rfHints" class="rf-hints"></div>
+    </aside>
+    </div>`;
 
   const form = document.getElementById("recipeForm");
   let captcha = null;
@@ -139,26 +155,32 @@ export function mountRecipeForm(host, o) {
     m.className = "form-msg" + (kind ? " " + kind : "");
     if (text && kind === "err") m.scrollIntoView({ block: "center", behavior: "smooth" });
   };
+  let localPhoto = null; // object URL выбранного файла — показываем сразу, пока фото грузится на сервер
   const drawPhoto = () => {
-    preview.innerHTML = image ? `<img src="${esc(imageUrl(image))}" alt="">` : `<span class="photo-empty">Нет фото — будет эмодзи</span>`;
-    document.getElementById("photoRemove").hidden = !image;
+    preview.innerHTML = localPhoto ? `<img src="${esc(localPhoto)}" alt="" class="uploading">`
+      : image ? `<img src="${esc(imageUrl(image))}" alt="">` : `<span class="photo-empty">Нет фото — будет эмодзи</span>`;
+    document.getElementById("photoRemove").hidden = !image && !localPhoto;
+    schedulePreview();
   };
-  drawPhoto();
   document.getElementById("rfBack").addEventListener("click", o.onBack);
   document.getElementById("cancelBtn").addEventListener("click", o.onBack);
-  document.getElementById("photoRemove").addEventListener("click", () => { image = null; drawPhoto(); });
+  document.getElementById("photoRemove").addEventListener("click", () => { image = null; localPhoto = null; drawPhoto(); });
   document.getElementById("photoFile").addEventListener("change", async (e) => {
     const file = e.target.files[0];
     e.target.value = "";
     if (!file) return;
     if (file.size > 5 * 1024 * 1024) { msg("Файл больше 5 МБ", "err"); return; }
-    preview.innerHTML = `<span class="photo-empty">Загрузка фото…</span>`;
+    const local = URL.createObjectURL(file);
+    localPhoto = local;
+    drawPhoto();
     try {
       image = (await endpoints.uploadImage(file)).url;
       msg("");
     } catch (err) {
       msg("Фото не загрузилось: " + (err instanceof NetworkError ? "нет связи с сервером" : err.message), "err");
     }
+    if (localPhoto === local) localPhoto = null;
+    URL.revokeObjectURL(local);
     drawPhoto();
   });
 
@@ -277,6 +299,7 @@ export function mountRecipeForm(host, o) {
     if (!input || !items[k]) return;
     input.value = items[k].name;
     ing[+input.closest(".row").dataset.i].name = items[k].name;
+    schedulePreview();
     closeSugg();
     const qty = input.closest(".row").querySelector(".ing-qty");
     if (qty) qty.focus();
@@ -315,8 +338,8 @@ export function mountRecipeForm(host, o) {
   document.getElementById("stepAdd").addEventListener("click", () => addRow(steps, drawSteps, "stepList", newStep()));
   document.getElementById("stepAddH").addEventListener("click", () => addRow(steps, drawSteps, "stepList", { h: true, text: "" }));
 
-  form.addEventListener("submit", async (e) => {
-    e.preventDefault();
+  // Текущее содержимое формы в формате API — для сохранения и для предпросмотра
+  const collect = () => {
     const input = {
       title: form.title.value.trim(),
       category: form.category.value.trim(),
@@ -332,6 +355,57 @@ export function mountRecipeForm(host, o) {
     if (mode === "moderate") input.status = "PUBLISHED";
     const slugVal = form.slug ? form.slug.value.trim() : "";
     if (slugVal) input.slug = slugVal;
+    return input;
+  };
+
+  // ---------- Предпросмотр: тот же код страницы рецепта (recipeView.js), без побочных эффектов ----------
+  const split = document.getElementById("rfSplit");
+  const prevHost = document.getElementById("rfPreview");
+  const hintsHost = document.getElementById("rfHints");
+  const wide = matchMedia("(min-width: 1000px)"); // рядом с формой; на узком экране — переключатель
+  let lastKey = "", prevTimer = null;
+  const previewVisible = () => wide.matches || split.dataset.mode === "preview";
+  const refreshPreview = (force) => {
+    if (!form.isConnected || !previewVisible()) return;
+    const input = collect();
+    const photo = localPhoto || input.image; // до загрузки на сервер показываем локальный файл
+    const rec = fromApi({ ...input, slug: input.slug || "preview", title: input.title || "Без названия",
+      category: { name: input.category }, image: photo });
+    const hints = recipeHints({ ...input, image: photo, ing, steps });
+    const key = JSON.stringify([rec, hints]);
+    if (!force && key === lastKey) return;
+    lastKey = key;
+    clearAllTimers(); // старая страница уходит — её таймеры не должны звонить
+    mountRecipeView(prevHost, rec, { preview: true, timers: { bind: bindTimers, addCustom: addCustomTimer, startCustom: startCustomTimer } });
+    hintsHost.innerHTML = hints.length
+      ? `<div class="rf-hints-title">Что поправить</div><ul>${hints.map((h) => `<li>${esc(h)}</li>`).join("")}</ul>`
+      : `<div class="rf-hints-ok">✅ Недочётов не видно</div>`;
+  };
+  function schedulePreview() {
+    clearTimeout(prevTimer);
+    prevTimer = setTimeout(() => refreshPreview(false), 300);
+  }
+  form.addEventListener("input", schedulePreview);
+  form.addEventListener("change", schedulePreview);
+  form.addEventListener("click", schedulePreview); // ↑↓ ✕ ＋ перерисовывают строки без события input
+  const setMode = (m) => {
+    split.dataset.mode = m;
+    host.querySelectorAll(".rf-mode").forEach((b) => {
+      const on = b.dataset.mode === m;
+      b.classList.toggle("active", on);
+      b.setAttribute("aria-pressed", String(on));
+    });
+    if (m === "preview") { refreshPreview(true); window.scrollTo(0, 0); }
+    else if (!wide.matches) clearAllTimers(); // форма скрывает предпросмотр — не оставляем звонящие таймеры
+  };
+  host.querySelectorAll(".rf-mode").forEach((b) => b.addEventListener("click", () => setMode(b.dataset.mode)));
+  wide.addEventListener("change", () => refreshPreview(true));
+  drawPhoto();
+  refreshPreview(true);
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const input = collect();
 
     const errs = [];
     if (!input.title) errs.push("Укажите название");
