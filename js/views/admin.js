@@ -260,7 +260,7 @@ async function renderQueue(seq) {
         <div class="recent-img admin-thumb">${img}</div>
         <div class="admin-info">
           <div class="admin-title">${esc(r.title)}</div>
-          <div class="admin-sub"><span class="status-badge pending">На модерации</span>
+          <div class="admin-sub"><span class="status-badge pending">На модерации</span>${r.adminEditedAt ? ` <span class="status-badge working" title="Правки сохранены, но не опубликованы — автор их не может менять">✏️ в работе</span>` : ""}
             ${esc(r.category.name)} · ${esc(r.author ? `${r.author.displayName} (${r.author.email})` : "автор удалён")} · ${esc(when)}</div>
         </div>
         <div class="admin-btns">
@@ -373,9 +373,14 @@ async function renderReview(slug, seq) {
     mode: "moderate", recipe: item, cats,
     title: "✏️ " + item.title,
     notice: `<div class="form-msg info">Предложил(а): ${esc(item.author ? `${item.author.displayName} · ${item.author.email}` : "автор удалён")}.
-      Сохранение опубликует рецепт.</div>`,
+      «Сохранить правки» оставит предложение в очереди (автор не сможет его менять), «Сохранить и опубликовать» — опубликует рецепт.</div>`,
     backLabel: "← К предложениям", onBack: () => { location.hash = "#/admin/submissions"; },
     saveLabel: "✅ Сохранить и опубликовать",
+    secondary: {
+      label: "💾 Сохранить правки",
+      save: (input) => endpoints.saveSubmissionEdits(item.id, input),
+      onSaved: () => toast("Правки сохранены, предложение осталось в очереди 💾"),
+    },
     save: (input) => endpoints.updateRecipe(item.id, input),
     onSaved: () => {
       toast("Опубликовано ✅");

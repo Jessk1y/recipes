@@ -8,3 +8,4 @@ exports.update = async (req, res) => res.json(await service.update(req.user.id, 
 exports.queue = async (req, res) => res.json(await service.queue(req.validQuery));
 exports.approve = async (req, res) => res.json(await service.approve(req.params.id));
 exports.reject = async (req, res) => res.json(await service.reject(req.params.id, req.body.reason));
+exports.saveEdits = async (req, res) => res.json(await service.saveEdits(req.params.id, req.body));

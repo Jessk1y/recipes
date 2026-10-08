@@ -467,11 +467,11 @@ const paths = {
       tags: ["Предложения рецептов"],
       summary: "Изменить предложение",
       description:
-        "Пока оно `PENDING` или `REJECTED`; после одобрения — 409 `NOT_EDITABLE`. Правка отклонённого возвращает его на модерацию (причина стирается) и считается новой отправкой в лимите.",
+        "Пока оно `PENDING` или `REJECTED`; после одобрения — 409 `NOT_EDITABLE`. Если администратор сохранил правки без публикации (`adminEditedAt` задан), пока он не принял решение, автор править не может — 409 `ADMIN_EDITING`; после отказа правка снова доступна. Правка отклонённого возвращает его на модерацию (причина стирается) и считается новой отправкой в лимите.",
       security: auth,
       parameters: [idParam("id предложения")],
       requestBody: body(ref("SubmissionInput")),
-      responses: { 200: ok("Предложение после правки", ref("Submission")), 401: E[401], 403: E[403], 404: E[404], 409: err("Уже рассмотрено (`NOT_EDITABLE`)"), 422: E[422], 429: err("Лимит предложений (`SUBMISSION_LIMIT`)") },
+      responses: { 200: ok("Предложение после правки", ref("Submission")), 401: E[401], 403: E[403], 404: E[404], 409: err("Уже рассмотрено (`NOT_EDITABLE`) или администратор вносит правки (`ADMIN_EDITING`)"), 422: E[422], 429: err("Лимит предложений (`SUBMISSION_LIMIT`)") },
     },
   },
   "/admin/submissions": {
@@ -480,6 +480,18 @@ const paths = {
       ...adminOnly("Очередь предложений", "Только `PENDING`, старые сверху, с автором. «Поправить и опубликовать» — обычный `PUT /recipes/{id}` со `status: PUBLISHED`."),
       parameters: [page, limit(50)],
       responses: { 200: ok("Страница очереди", pageOf(ref("SubmissionQueueItem"))), 401: E[401], 403: E[403], 422: E[422] },
+    },
+  },
+  "/admin/submissions/{id}": {
+    put: {
+      tags: ["Предложения рецептов"],
+      ...adminOnly(
+        "Сохранить правки предложения без публикации",
+        "Тело — как у `POST /recipes` (`status` игнорируется). Предложение остаётся `PENDING`, ставится `adminEditedAt`: автор больше не может его править (409 `ADMIN_EDITING`), в «Моих предложениях» — «Администратор вносит правки», в очереди — метка «в работе». Обновление условное (только `PENDING`): уже рассмотренное — 409 `NOT_PENDING`. Отказ снимает блокировку автора."
+      ),
+      parameters: [idParam("id предложения")],
+      requestBody: body(ref("RecipeInput")),
+      responses: { 200: ok("Предложение с правками", ref("SubmissionQueueItem")), 401: E[401], 403: E[403], 404: E[404], 409: err("Уже рассмотрено (`NOT_PENDING`) или занят slug (`SLUG_TAKEN`)"), 422: E[422] },
     },
   },
   "/admin/submissions/{id}/approve": {
@@ -748,7 +760,7 @@ const schemas = {
   Submission: {
     allOf: [
       ref("Recipe"),
-      obj({ submittedAt: dateTime, rejectReason: nullableStr({ description: "Только у `REJECTED`" }), reviewedAt: { ...dateTime, nullable: true } }),
+      obj({ submittedAt: dateTime, rejectReason: nullableStr({ description: "Только у `REJECTED`" }), reviewedAt: { ...dateTime, nullable: true }, adminEditedAt: { ...dateTime, nullable: true, description: "Админ сохранил правки без публикации (только у `PENDING`): автор править не может" } }),
     ],
   },
   SubmissionQueueItem: {

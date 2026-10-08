@@ -15,6 +15,8 @@ const view = () => els.accountView;
 const verified = () => getUser()?.emailVerified !== false || !mailEnabled();
 const toAccount = () => { location.hash = "#/account"; };
 
+// админ сохранил правки без публикации — автор временно не может править
+const adminEditing = (r) => r.status === "PENDING" && !!r.adminEditedAt;
 const STATUS = {
   PENDING: ["pending", "На модерации"],
   REJECTED: ["rejected", "Отклонён"],
@@ -81,15 +83,16 @@ async function renderList(seq) {
           (отправить ещё раз можно в <a href="#/account">аккаунте</a>).</div>`}
     <ul class="admin-list" id="myList">
       ${data.items.map((r) => {
-        const [cls, label] = STATUS[r.status] || ["draft", r.status];
+        const [cls, label] = adminEditing(r) ? ["pending", "Администратор вносит правки"] : STATUS[r.status] || ["draft", r.status];
         const img = r.image ? `<img src="${esc(imageUrl(r.image))}" alt="" loading="lazy">` : emojiFor({ main: r.main, category: r.category.name });
         const when = new Date(r.submittedAt).toLocaleDateString("ru-RU", { day: "numeric", month: "short" });
-        const editable = canSubmit && (r.status === "PENDING" || r.status === "REJECTED");
+        const editable = canSubmit && !adminEditing(r) && (r.status === "PENDING" || r.status === "REJECTED");
         return `<li class="admin-row">
           <div class="recent-img admin-thumb">${img}</div>
           <div class="admin-info">
             <div class="admin-title">${esc(r.title)}</div>
             <div class="admin-sub"><span class="status-badge ${cls}">${esc(label)}</span> ${esc(r.category.name)} · отправлено ${esc(when)}</div>
+            ${adminEditing(r) ? `<div class="auth-hint small">Администратор правит рецепт перед публикацией — пока вы его изменить не можете.</div>` : ""}
             ${r.status === "REJECTED" && r.rejectReason ? `<div class="reject-reason">Причина: ${esc(r.rejectReason)}</div>` : ""}
             ${r.status === "REJECTED" ? `<div class="auth-hint small">Исправьте и отправьте снова — иначе через 30 дней без правок предложение удалится.</div>` : ""}
           </div>
@@ -124,6 +127,11 @@ async function renderForm(id, seq) {
   if (seq !== renderSeq) return;
   if (recipe && recipe.status !== "PENDING" && recipe.status !== "REJECTED") {
     toast("Предложение уже рассмотрено — править его нельзя");
+    location.hash = "#/my";
+    return;
+  }
+  if (recipe && adminEditing(recipe)) {
+    toast("Администратор вносит правки — пока предложение изменить нельзя");
     location.hash = "#/my";
     return;
   }

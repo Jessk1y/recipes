@@ -7,7 +7,8 @@ import { MAIN_TAGS } from "../config.js";
 import * as endpoints from "../api/endpoints.js";
 import { ApiError, NetworkError, imageUrl } from "../api/client.js";
 import { esc } from "../lib/utils.js";
-import { getCatalog } from "../core/store.js";
+import { getCatalog, getUser } from "../core/store.js";
+import { draftStore as LS, draftKey, contentKey, syncDraft, loadDraft, clearDraft, draftRecipe } from "../lib/formDraft.js";
 import { mountTurnstile } from "../lib/turnstile.js";
 import { buildSuggestions, suggest, norm } from "../lib/suggest.js";
 import { UNITS, ingredientRows, ingredientsOut, stepRows, stepsOut, hasTime, recipeHints } from "../lib/recipeFields.js";
@@ -42,12 +43,15 @@ const TXT = 'spellcheck="true" lang="ru" autocapitalize="sentences"';
  * @param o.onSaved (saved) — что делать после успеха
  * @param o.notice  html-плашка над формой (например, «Предложил: …»)
  * @param o.saveLabel подпись кнопки сохранения
+ * @param o.secondary {label, save, onSaved} — вторая кнопка «сохранить без публикации»: после успеха форма остаётся открытой
+ * @param o.restored / o.baselineKey  служебные: повторный вызов с восстановленным черновиком (см. lib/formDraft.js)
  * @param o.captchaKey публичный ключ Turnstile — если задан, перед отправкой нужно пройти «я не робот» (новое предложение)
  */
 export function mountRecipeForm(host, o) {
   const mode = o.mode;
   const recipe = o.recipe;
-  const r = recipe || { title: "", slug: "", category: { name: "" }, main: [], tags: [], image: null, time: "", servings: "", ingredients: [], steps: [], status: "DRAFT" };
+  const dKey = draftKey({ uid: getUser()?.id, mode, id: recipe?.id });
+  const r = o.restored ? draftRecipe(recipe, o.restored.input) : recipe || { title: "", slug: "", category: { name: "" }, main: [], tags: [], image: null, time: "", servings: "", ingredients: [], steps: [], status: "DRAFT" };
   let image = r.image || null;
 
   const catNames = o.cats.map((c) => c.name);
@@ -87,6 +91,7 @@ export function mountRecipeForm(host, o) {
     <div class="rf-split" id="rfSplit" data-mode="edit">
     <div class="rf-edit">
     ${o.notice || ""}
+    <div id="draftBox"></div>
     <form id="recipeForm" class="form admin-form" novalidate>
       <div id="formMsg" class="form-msg" hidden></div>
       <label class="field">Название *<input name="title" class="ct-input" ${TXT} maxlength="200" value="${esc(r.title)}" required></label>
@@ -128,6 +133,7 @@ export function mountRecipeForm(host, o) {
       ${statusRow}
       ${o.captchaKey ? `<div id="captchaBox" class="captcha-box"></div>` : ""}
       <div class="detail-actions">
+        ${o.secondary ? `<button class="tool-btn" type="button" id="saveEditsBtn">${esc(o.secondary.label)}</button>` : ""}
         <button class="tool-btn accent" type="submit" id="saveBtn">${esc(o.saveLabel || "💾 Сохранить")}</button>
         <button class="tool-btn" type="button" id="cancelBtn">Отмена</button>
       </div>
@@ -403,8 +409,55 @@ export function mountRecipeForm(host, o) {
   drawPhoto();
   refreshPreview(true);
 
-  form.addEventListener("submit", async (e) => {
-    e.preventDefault();
+  // ---------- Автосохранение несохранённой формы (localStorage) ----------
+  let baseline = o.baselineKey ?? contentKey(collect()); // содержимое исходного рецепта (до правок и до черновика)
+  let curBase = recipe?.updatedAt || null; // версия рецепта на сервере, с которой начали править
+  let deciding = !o.restored && !!loadDraft(LS, dKey, baseline); // пока пользователь не выбрал «восстановить/удалить», старый черновик не затираем
+  let saveTimer = null, closed = false;
+  const flush = () => {
+    clearTimeout(saveTimer);
+    if (closed || deciding || !form.isConnected) return;
+    syncDraft(LS, dKey, collect(), baseline, curBase);
+  };
+  const scheduleDraft = () => { clearTimeout(saveTimer); saveTimer = setTimeout(flush, 800); };
+  form.addEventListener("input", scheduleDraft);
+  form.addEventListener("change", scheduleDraft);
+  form.addEventListener("click", scheduleDraft);
+  const onHide = () => {
+    if (!form.isConnected) { document.removeEventListener("visibilitychange", onHide); window.removeEventListener("pagehide", onHide); return; }
+    if (document.visibilityState === "hidden" || document.visibilityState === undefined) flush();
+  };
+  document.addEventListener("visibilitychange", onHide);
+  window.addEventListener("pagehide", flush);
+  const draftBox = document.getElementById("draftBox");
+  const when = (t) => new Date(t).toLocaleString("ru-RU", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  if (o.restored) {
+    const d = o.restored;
+    const stale = d.base && recipe?.updatedAt && d.base !== recipe.updatedAt;
+    draftBox.innerHTML = `<div class="form-msg info">♻️ Восстановлен несохранённый черновик от ${esc(when(d.savedAt))}.${stale ? " Рецепт на сервере изменился после этого — проверьте поля перед сохранением." : ""}
+      <button type="button" class="act-btn" id="draftDrop">Вернуть сохранённую версию</button></div>`;
+    document.getElementById("draftDrop").addEventListener("click", () => {
+      closed = true; clearDraft(LS, dKey);
+      mountRecipeForm(host, { ...o, restored: null, baselineKey: null });
+    });
+  } else if (deciding) {
+    const d = loadDraft(LS, dKey, baseline);
+    draftBox.innerHTML = `<div class="form-msg info">📝 Есть несохранённый черновик от ${esc(when(d.savedAt))}. Пока вы не выбрали, новые правки не сохраняются.
+      <button type="button" class="act-btn" id="draftRestore">Восстановить</button>
+      <button type="button" class="act-btn danger" id="draftDiscard">Удалить</button></div>`;
+    document.getElementById("draftRestore").addEventListener("click", () => {
+      closed = true;
+      mountRecipeForm(host, { ...o, restored: d, baselineKey: baseline });
+    });
+    document.getElementById("draftDiscard").addEventListener("click", () => {
+      clearDraft(LS, dKey); deciding = false; draftBox.innerHTML = "";
+    });
+  }
+
+  // ---------- Сохранение ----------
+  const buttons = () => [document.getElementById("saveBtn"), document.getElementById("saveEditsBtn")].filter(Boolean);
+  // stay: после успеха форма остаётся (вторая кнопка) — тогда исходным считается сохранённое
+  async function run(saver, onSaved, stay) {
     const input = collect();
 
     const errs = [];
@@ -420,13 +473,21 @@ export function mountRecipeForm(host, o) {
       input.turnstileToken = captcha.token();
     }
 
-    const btn = document.getElementById("saveBtn");
-    btn.disabled = true;
+    buttons().forEach((b) => { b.disabled = true; });
     msg("Сохранение…", "info");
     try {
-      o.onSaved(await o.save(input));
+      const saved = await saver(input);
+      closed = true; clearTimeout(saveTimer); clearDraft(LS, dKey); // сервер принял — черновик больше не нужен
+      if (stay) {
+        closed = false; deciding = false; draftBox.innerHTML = "";
+        curBase = saved?.updatedAt || curBase;
+        baseline = contentKey(collect());
+        msg("");
+        buttons().forEach((b) => { b.disabled = false; });
+      }
+      onSaved(saved);
     } catch (err) {
-      btn.disabled = false;
+      buttons().forEach((b) => { b.disabled = false; });
       if (captcha) captcha.reset(); // токен одноразовый — после любой неудачи нужен новый
       if (err instanceof ApiError && err.details && err.details.length) {
         msg(err.details.map((d) => `${FIELD_NAMES[d.field.split(".")[0]] || d.field}: ${d.message}`).join(" · "), "err");
@@ -434,6 +495,8 @@ export function mountRecipeForm(host, o) {
         msg(err instanceof NetworkError ? "Нет связи с сервером — рецепт не сохранён" : err.message, "err");
       }
     }
-  });
+  }
+  form.addEventListener("submit", (e) => { e.preventDefault(); run(o.save, o.onSaved, false); });
+  const sec = document.getElementById("saveEditsBtn");
+  if (sec) sec.addEventListener("click", () => run(o.secondary.save, o.secondary.onSaved, true));
 }
-

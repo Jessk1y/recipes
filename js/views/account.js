@@ -223,7 +223,6 @@ function renderProfile(user) {
         </div>` : ""}
       <div class="sync-row">
         <p class="sync-line" id="syncLine">${esc(syncText())}</p>
-        <button class="sync-icon" id="syncNow" title="Синхронизировать сейчас" aria-label="Синхронизировать сейчас">🔄</button>
       </div>
       <div class="detail-actions">
         <button class="act-btn" id="toMy">📨 Мои предложения</button>
@@ -248,11 +247,6 @@ function renderProfile(user) {
       say(errText(err));
       resend.disabled = false;
     }
-  });
-  const syncBtn = document.getElementById("syncNow");
-  syncBtn.addEventListener("click", () => {
-    syncBtn.classList.add("spinning");
-    sync.flush().catch(() => {}).finally(() => syncBtn.classList.remove("spinning"));
   });
   document.getElementById("toMy").addEventListener("click", () => { location.hash = "#/my"; });
   const adm = document.getElementById("toAdmin");

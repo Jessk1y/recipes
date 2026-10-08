@@ -17,6 +17,9 @@ const submissionInput = withContent(
   })
 );
 
+// админ правит предложение: можно slug и любую категорию/фото как в обычном рецепте; status не принимается (остаётся PENDING)
+const adminEditInput = withContent(recipeShape.omit({ status: true }));
+
 const id = z.object({ id: z.string().max(64) }); // формат uuid проверяет сервис (чужой/кривой id → 404)
 const rejectInput = z.object({ reason: z.string().trim().min(3, "Укажите причину (от 3 символов)").max(500) });
 const queueQuery = z.object({
@@ -24,4 +27,4 @@ const queueQuery = z.object({
   limit: z.coerce.number().int().min(1).max(50).default(20),
 });
 
-module.exports = { submissionInput, id, rejectInput, queueQuery };
+module.exports = { submissionInput, adminEditInput, id, rejectInput, queueQuery };

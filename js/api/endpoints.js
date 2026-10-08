@@ -64,6 +64,7 @@ export async function adminQueue() {
     if (all.length >= r.total || !r.items.length) return all;
   }
 }
+export const saveSubmissionEdits = (id, input) => api(`/admin/submissions/${encodeURIComponent(id)}`, { auth: true, method: "PUT", body: input, ...slow });
 export const approveSubmission = (id) => api(`/admin/submissions/${encodeURIComponent(id)}/approve`, { auth: true, ...post() });
 export const rejectSubmission = (id, reason) => api(`/admin/submissions/${encodeURIComponent(id)}/reject`, { auth: true, ...post({ reason }) });
 

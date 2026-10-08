@@ -18,6 +18,7 @@ router.patch("/users/:id/block", validate.params(schemas.userId), validate(schem
 
 // модерация предложений рецептов («поправить и опубликовать» — обычный PUT /recipes/:id со status=PUBLISHED)
 router.get("/submissions", validate.query(subSchemas.queueQuery), sub.queue);
+router.put("/submissions/:id", validate(subSchemas.adminEditInput), sub.saveEdits); // сохранить правки без публикации
 router.post("/submissions/:id/approve", sub.approve);
 router.post("/submissions/:id/reject", validate(subSchemas.rejectInput), sub.reject);
 

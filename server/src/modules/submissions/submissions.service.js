@@ -18,6 +18,8 @@ const view = (r) => ({
   submittedAt: r.submittedAt,
   rejectReason: r.status === "REJECTED" ? r.rejectReason : null,
   reviewedAt: r.reviewedAt,
+  // админ правит предложение без публикации: у автора оно временно заблокировано (только у PENDING)
+  adminEditedAt: r.status === "PENDING" ? r.adminEditedAt : null,
 });
 
 // Пуш админам с подпиской: в очереди появилась новая отправка. Не чаще раза в 10 минут — остальные склеиваются
@@ -94,15 +96,18 @@ async function update(userId, id, input) {
   const out = await recipes.write(id, { ...input, status: "PENDING" }, null, {
     before: async (tx) => {
       // блокировка строки: пока автор правит, админ не успеет её одобрить; а правка после решения получит 409
-      const rows = await tx.$queryRaw`SELECT status::text AS status FROM recipes
+      const rows = await tx.$queryRaw`SELECT status::text AS status, admin_edited_at AS "adminEditedAt" FROM recipes
         WHERE id = ${id}::uuid AND author_id = ${userId}::uuid AND submitted_at IS NOT NULL FOR UPDATE`;
       if (!rows.length) throw recipes.notFound();
       if (!EDITABLE.includes(rows[0].status)) throw new AppError(409, "NOT_EDITABLE", "Предложение уже рассмотрено — править его нельзя");
+      if (rows[0].status === "PENDING" && rows[0].adminEditedAt) {
+        throw new AppError(409, "ADMIN_EDITING", "Администратор вносит правки в это предложение — пока править его нельзя. Дождитесь решения.");
+      }
       await requireCategory(tx, input.category);
       if (rows[0].status === "REJECTED") {
         // повторная отправка после отказа считается новой отправкой; правка ожидающего — нет
         await checkLimit(tx, userId, id);
-        Object.assign(data, { submittedAt: new Date(), rejectReason: null });
+        Object.assign(data, { submittedAt: new Date(), rejectReason: null, adminEditedAt: null });
       }
     },
     data,
@@ -152,6 +157,28 @@ async function decide(id, data) {
 
 // при одобрении рецепт попадает в начало ленты «новое» (createdAt = момент публикации)
 const approve = (id) => decide(id, { status: "PUBLISHED", rejectReason: null, createdAt: new Date() });
-const reject = (id, reason) => decide(id, { status: "REJECTED", rejectReason: reason });
+// при отказе блокировка автора снимается: он снова может исправить и отправить
+const reject = (id, reason) => decide(id, { status: "REJECTED", rejectReason: reason, adminEditedAt: null });
 
-module.exports = { listMine, getMine, create, update, queue, approve, reject };
+// Админ сохраняет правки предложения БЕЗ публикации: остаётся PENDING, ставится adminEditedAt (автор больше не правит).
+// Условный UPDATE ... WHERE status=PENDING берёт блокировку строки: одновременные решение/правка автора ждут и видят итог.
+async function saveEdits(id, input) {
+  recipes.parseId(id);
+  const out = await recipes.write(id, { ...input, status: "PENDING" }, null, {
+    before: async (tx) => {
+      const res = await tx.recipe.updateMany({
+        where: { id, status: "PENDING", submittedAt: { not: null } },
+        data: { adminEditedAt: new Date() },
+      });
+      if (!res.count) {
+        const r = await tx.recipe.findFirst({ where: { id, submittedAt: { not: null } }, select: { id: true } });
+        if (!r) throw recipes.notFound();
+        throw new AppError(409, "NOT_PENDING", "Предложение уже рассмотрено");
+      }
+    },
+    data: {}, // не «правка админа с публикацией»: статус и дата отправки не трогаем
+  });
+  return view(await prisma.recipe.findUnique({ where: { id: out.id }, include: recipes.fullInclude }));
+}
+
+module.exports = { listMine, getMine, create, update, queue, approve, reject, saveEdits };

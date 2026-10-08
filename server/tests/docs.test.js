@@ -51,8 +51,8 @@ test("админские операции помечены security и 403", () 
       if (item[m].description?.startsWith("**Только администратор.**")) adminOps.push([m, p, item[m]]);
     }
   }
-  // 4 записи рецептов + 3 метода admin/users + 3 метода admin/submissions + admin/stats + 4 метода admin/push (загрузка фото — не только админам)
-  assert.equal(adminOps.length, 15, `админских операций: ${adminOps.length}`);
+  // 4 записи рецептов + 3 метода admin/users + 4 метода admin/submissions + admin/stats + 4 метода admin/push (загрузка фото — не только админам)
+  assert.equal(adminOps.length, 16, `админских операций: ${adminOps.length}`);
   for (const [m, p, op] of adminOps) {
     assert.ok(op.security, `${m} ${p}: security`);
     assert.ok(op.responses[403], `${m} ${p}: 403`);

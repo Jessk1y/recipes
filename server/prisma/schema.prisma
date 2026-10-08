@@ -122,6 +122,8 @@ model Recipe {
   submittedAt  DateTime?    @map("submitted_at")
   rejectReason String?      @map("reject_reason")
   reviewedAt   DateTime?    @map("reviewed_at")
+  // админ сохранил правки без публикации: предложение остаётся PENDING, но автору править его нельзя (сбрасывается при отказе)
+  adminEditedAt DateTime?   @map("admin_edited_at")
   createdAt   DateTime     @default(now()) @map("created_at")
   updatedAt   DateTime     @updatedAt @map("updated_at")
 
